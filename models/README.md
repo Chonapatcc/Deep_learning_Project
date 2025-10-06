@@ -4,11 +4,39 @@
 
 This directory stores **pre-trained** ASL recognition models used by the application.
 
+## 📋 Current Models
+
+### ✅ Available
+- **trained_model_10epochs.h5** - CNN model (10 training epochs)
+
 ---
 
 ## 🎯 Supported Model Types
 
-### 1. ML Model (RandomForest) - Recommended for Quick Start
+### 1. CNN Model (Deep Learning) - **Currently Active**
+```
+models/trained_model_10epochs.h5  # ← Your current model
+```
+
+**Alternative names supported:**
+```
+models/best_transfer_CNN.keras
+models/asl_cnn_model.h5
+models/asl_cnn_model.keras
+models/asl_model.h5
+models/asl_model.keras
+```
+
+**Specs:**
+- Size: ~50-100 MB
+- Training time: 1-4 hours (GPU recommended)
+- Accuracy: ~85-95%
+- Inference speed: ~50-100ms
+- Auto-creates label encoder if missing
+
+---
+
+### 2. ML Model (RandomForest) - Optional Alternative
 ```
 models/asl_model.pkl
 ```

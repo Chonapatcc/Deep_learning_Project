@@ -2,6 +2,84 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.1] - 2025-10-06
+
+### Fixed
+- 🐛 **Learning Mode Display**: Fixed cramped layout by implementing fullscreen character display
+  - Characters now show in fullscreen when selected
+  - Added back navigation button
+  - Larger character display (12rem vs 8rem)
+  - Better example image layout (fullwidth grid)
+  - No more overlapping content
+
+- 🐛 **Test Mode Examples Removed**: Removed example images from test interface
+  - True testing environment (no cheating)
+  - Shows only character and instructions
+  - Cleaner, faster test interface
+
+- 🐛 **Test Mode Auto-Skip**: Auto-advance to next question when correct answer detected
+  - No manual confirmation needed
+  - Smooth progression after 30 consecutive correct frames
+  - Added optional manual skip button
+
+- 🐛 **Practice Mode Stats**: Fixed division by zero error when no attempts made
+  - Safe division with default values
+  - Shows 0.0% instead of crashing
+  - Uses `.get()` for safe dictionary access
+  - Better decimal precision (1 decimal place)
+
+### Improved
+- 📱 **Learning Mode UX**: Fullscreen layout with better navigation
+- 🎯 **Test Mode Flow**: Automatic progression reduces test time
+- 📊 **Practice Mode Stats**: More stable and professional display
+
+## [2.4.0] - 2025-10-06
+
+### Added
+- 🔢 **Number Support (0-9)**:
+  - Complete number gestures (0-9) added to learning mode
+  - Number instructions in Thai for all digits
+  - Separate tab for numbers in learning mode
+  - Practice mode now includes 36 characters (A-Z + 0-9)
+  - Test mode supports numbers
+
+- 📸 **Camera-Based Test Mode**:
+  - Real-time gesture detection during tests
+  - Requires 30 consecutive correct detections for confirmation
+  - Progress indicator (0-100%) during detection
+  - Reference images and instructions displayed during test
+  - Auto-confirmation when target gesture detected
+
+- 💬 **Word Formation Display**:
+  - New section in translation mode showing formed words
+  - Words separated by " · " for clarity
+  - Real-time updates as user signs
+  - Helps visualize word boundaries
+
+- 🎓 **Enhanced Learning Mode**:
+  - Improved with "ตัวอย่างให้ ดีกว่านี้" title
+  - Increased examples from 6 to 9 images per character
+  - Organized tabs: "🔤 A-Z" and "🔢 0-9"
+  - Better grid layout (7 columns for letters, 10 for numbers)
+  - Image captions for each example
+
+- 📦 **CNN .pkl Support**:
+  - Load CNN models from pickle files
+  - Priority: .pkl → .keras → .h5
+  - Extracts model and label encoder from pickle data
+
+### Changed
+- 🔤 **Alphabet Constant**: Expanded from 26 to 36 characters (A-Z0-9)
+- 🏷️ **Label Encoder**: Now supports 36 classes instead of 26
+- 📝 **Character Type Detection**: Auto-detects if practicing letter or number
+- 🎯 **Test Mode UI**: Split into reference column and camera column
+
+### Improved
+- Better Thai translations and descriptions
+- More robust model loading with multiple format support
+- Enhanced user feedback in all modes
+- Clearer visual hierarchy in learning mode
+
 ## [2.3.3] - 2025-10-06
 
 ### Changed
