@@ -1,0 +1,1 @@
+- in practice mode when detect , need to wait for detect like in practice mode or in realtime

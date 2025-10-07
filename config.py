@@ -116,46 +116,12 @@ class InferenceConfig:
     #   3. 'skeleton_only' - Raw image → MediaPipe skeleton extraction → resize → preprocess → inference (skeleton only)
     APPROACH = 'image_with_skeleton'
     
-    # Ensemble prediction settings
-    USE_ENSEMBLE = True  # Use multiple augmentations for better accuracy
-    ENSEMBLE_AUGMENTATIONS = [
-        'normal',        # Original image
-        'zoom_in',       # 1.2x zoom (crop center)
-        'zoom_out',      # 0.8x zoom (add padding)
-        'brighter',      # +30 brightness
-        'darker',        # -30 brightness
-        'contrast'       # 1.3x contrast
-    ]
-    
-    # Skeleton visualization settings (for approaches 2 & 3)
+    # Skeleton preprocessing settings (for approaches 2 & 3)
+    # These are used internally for model preprocessing, not for camera display
     SKELETON_LINE_THICKNESS = 2
     SKELETON_POINT_RADIUS = 4
-    
-    # Skeleton colors - Different colors for points and lines
-    # Format: (R, G, B) with values 0-255
-    SKELETON_POINT_COLOR = (255, 255, 0)    # Yellow points - visible on both dark/bright backgrounds
-    SKELETON_LINE_COLOR = (0, 255, 255)     # Cyan lines - high contrast
-    
-    # Alternative color schemes (uncomment to use):
-    # High Visibility (recommended for varying lighting):
-    # SKELETON_POINT_COLOR = (255, 255, 0)   # Yellow
-    # SKELETON_LINE_COLOR = (0, 255, 255)    # Cyan
-    
-    # Classic (original):
-    # SKELETON_POINT_COLOR = (0, 255, 0)     # Green
-    # SKELETON_LINE_COLOR = (0, 255, 0)      # Green
-    
-    # Neon Style:
-    # SKELETON_POINT_COLOR = (255, 0, 255)   # Magenta
-    # SKELETON_LINE_COLOR = (0, 255, 0)      # Green
-    
-    # Professional:
-    # SKELETON_POINT_COLOR = (255, 255, 255) # White
-    # SKELETON_LINE_COLOR = (100, 149, 237)  # Cornflower Blue
-    
-    # Fire:
-    # SKELETON_POINT_COLOR = (255, 69, 0)    # Red-Orange
-    # SKELETON_LINE_COLOR = (255, 215, 0)    # Gold
+    SKELETON_POINT_COLOR = (255, 255, 0)    # Yellow points
+    SKELETON_LINE_COLOR = (0, 255, 255)     # Cyan lines
     
     # Background for skeleton-only approach
     # Options: 'black', 'white', 'transparent'
@@ -204,17 +170,6 @@ class PracticeModeConfig:
     MIN_KEYPOINTS_FOR_PREDICTION = 15
     PREDICTION_CONFIDENCE_THRESHOLD = 0.7
     
-    # ROI (Region of Interest) settings - VISUAL GUIDE ONLY
-    # Note: ROI restriction has been REMOVED - full image is now used for detection
-    # These settings only control the visual guide rectangle (green box)
-    SHOW_ROI_GUIDE = True  # Set to False to hide the green rectangle
-    ROI_TOP = 0.1
-    ROI_LEFT = 0.2
-    ROI_RIGHT = 0.8
-    ROI_BOTTOM = 0.8
-    ROI_COLOR = (0, 255, 0)  # Green (B, G, R format)
-    ROI_THICKNESS = 2
-    
     # Minimum hand size (still applies for quality check)
     MIN_HAND_WIDTH = 0.15
     MIN_HAND_HEIGHT = 0.15
@@ -257,8 +212,6 @@ class TranslationModeConfig:
     # Detection settings
     MIN_BUFFER_SIZE = 15
     DETECTION_CONFIDENCE = 0.75
-    
-    # ROI settings
     MIN_HAND_WIDTH = 0.15
     MIN_HAND_HEIGHT = 0.15
 

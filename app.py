@@ -19,14 +19,13 @@ import config
 from config import (
     PreprocessConfig, HandDetectionConfig, InferenceConfig,
     ModelConfig, PracticeModeConfig, TestModeConfig, UIConfig,
-    get_preprocess_function, get_resize_dimensions, get_color_conversion,
-    should_apply_skeleton, is_skeleton_only
+    get_preprocess_function, get_resize_dimensions, get_color_conversion
 )
 
 # Import utility functions
 from utils.model_loader import init_mediapipe, load_models
 from utils.prediction import predict_letter
-from utils.hand_processing import extract_keypoints, calculate_bbox  # Removed is_in_roi - now using full image
+from utils.hand_processing import extract_keypoints, calculate_bbox
 from utils.letter_data import get_letter_instructions
 
 # Load environment variables from .env file
@@ -531,23 +530,11 @@ def run_test_detection(target_letter):
         
         feedback_message = ""
         feedback_class = "feedback-warning"
+        skeleton_detected = False
         
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Draw landmarks with different colors for points and lines
-                from config import InferenceConfig
-                point_color = InferenceConfig.SKELETON_POINT_COLOR
-                line_color = InferenceConfig.SKELETON_LINE_COLOR
-                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
-                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
-                
-                mp_drawing.draw_landmarks(
-                    frame, 
-                    hand_landmarks, 
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
-                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
-                )
+                skeleton_detected = True
                 
                 # Extract keypoints
                 keypoints = extract_keypoints(hand_landmarks)
@@ -592,16 +579,15 @@ def run_test_detection(target_letter):
                         detection_frames = 0
                         feedback_message = "⏳ กำลังตรวจจับ..."
                         feedback_class = "feedback-warning"
-                
-                # Visual guide frame (optional - removed ROI restriction)
-                # Full image is now used for prediction
-                # Uncomment below to show guide rectangle:
-                # h, w = frame.shape[:2]
-                # cv2.rectangle(frame, (int(w*0.2), int(h*0.1)), (int(w*0.8), int(h*0.8)), (0, 255, 0), 2)
         else:
             detection_frames = 0
             feedback_message = "✋ ไม่พบมือ - กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
+        
+        # Add skeleton detection indicator
+        if skeleton_detected:
+            cv2.putText(frame, "Hand Detected", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # Display
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -658,23 +644,11 @@ def run_webcam_detection():
         
         feedback_message = ""
         feedback_class = "feedback-warning"
+        skeleton_detected = False
         
         if results.multi_hand_landmarks:
-            # Draw hand landmarks with different colors for points and lines
             for hand_landmarks in results.multi_hand_landmarks:
-                from config import InferenceConfig
-                point_color = InferenceConfig.SKELETON_POINT_COLOR
-                line_color = InferenceConfig.SKELETON_LINE_COLOR
-                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
-                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
-                
-                mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
-                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
-                )
+                skeleton_detected = True
                 
                 # Extract keypoints
                 keypoints = extract_keypoints(hand_landmarks)
@@ -684,11 +658,10 @@ def run_webcam_detection():
                 if len(st.session_state.keypoint_buffer) > 60:
                     st.session_state.keypoint_buffer.pop(0)
                 
-                # Check bounding box (only for size check, no ROI restriction)
+                # Check bounding box (only for size check)
                 bbox = calculate_bbox(hand_landmarks)
                 hand_size = max(bbox['width'], bbox['height'])
                 
-                # Removed ROI check - now uses full image for prediction
                 if hand_size < 0.2:
                     feedback_message = "🔍 มือเล็กไป กรุณาเข้าใกล้กล้อง"
                     feedback_class = "feedback-warning"
@@ -725,19 +698,14 @@ def run_webcam_detection():
                 else:
                     feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
                     feedback_class = "feedback-warning"
-                
-                # Optional: Draw visual guide rectangle (configurable)
-                # Full image is used for prediction (ROI restriction removed)
-                if PracticeModeConfig.SHOW_ROI_GUIDE:
-                    h, w = frame.shape[:2]
-                    cv2.rectangle(frame, 
-                                (int(w * PracticeModeConfig.ROI_LEFT), int(h * PracticeModeConfig.ROI_TOP)), 
-                                (int(w * PracticeModeConfig.ROI_RIGHT), int(h * PracticeModeConfig.ROI_BOTTOM)), 
-                                PracticeModeConfig.ROI_COLOR, 
-                                PracticeModeConfig.ROI_THICKNESS)
         else:
             feedback_message = "✋ ไม่พบมือ กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
+        
+        # Add skeleton detection indicator
+        if skeleton_detected:
+            cv2.putText(frame, "Hand Detected", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # Display frame
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -914,23 +882,11 @@ def show_translation_mode():
         
         feedback_message = ""
         feedback_class = "feedback-warning"
+        skeleton_detected = False
         
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Draw hand landmarks with different colors for points and lines
-                from config import InferenceConfig
-                point_color = InferenceConfig.SKELETON_POINT_COLOR
-                line_color = InferenceConfig.SKELETON_LINE_COLOR
-                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
-                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
-                
-                mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
-                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
-                )
+                skeleton_detected = True
                 
                 # Extract keypoints
                 keypoints = extract_keypoints(hand_landmarks)
@@ -940,10 +896,9 @@ def show_translation_mode():
                 if len(st.session_state.translation_buffer) > 30:
                     st.session_state.translation_buffer.pop(0)
                 
-                # Check hand size (removed ROI restriction for full image prediction)
+                # Check hand size
                 bbox = calculate_bbox(hand_landmarks)
                 
-                # Removed ROI check - now uses full image for prediction
                 if bbox['width'] >= 0.15 and bbox['height'] >= 0.15:
                     if len(st.session_state.translation_buffer) >= 15:
                         # Predict letter
@@ -990,6 +945,11 @@ def show_translation_mode():
         else:
             feedback_message = "👋 กรุณาแสดงมือต่อกล้อง"
             feedback_class = "feedback-warning"
+        
+        # Add skeleton detection indicator
+        if skeleton_detected:
+            cv2.putText(frame, "Hand Detected", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # Display frame
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
