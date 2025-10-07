@@ -31,6 +31,7 @@
 ### 🤖 Model & Training  
 - **[TRAINING_GUIDE.md](TRAINING_GUIDE.md)** - วิธี train model แบบละเอียด
 - **[MULTI_FRAMEWORK_GUIDE.md](MULTI_FRAMEWORK_GUIDE.md)** - ใช้ PyTorch/ONNX models
+- **[MOBILENETV2_PREPROCESSING.md](MOBILENETV2_PREPROCESSING.md)** - เพิ่มประสิทธิภาพด้วย MobileNetV2 ⭐
 - **[DATASET_REQUIREMENTS.md](DATASET_REQUIREMENTS.md)** - ข้อกำหนด dataset
 
 ### 🎨 Features & Customization
@@ -172,6 +173,8 @@ streamlit run app.py
 
 - **Streamlit**: Quick web app framework - รวดเร็ว ใช้งานง่าย
 - **MediaPipe Hands**: ตรวจจับมือและ 21 keypoints แบบ Real-time
+- **TensorFlow/Keras**: Deep learning framework สำหรับ AI model
+- **MobileNetV2**: Lightweight preprocessing - เหมาะสำหรับ real-time inference ⭐
 - **OpenCV**: ประมวลผลภาพและวิดีโอ
 - **Python**: ภาษาหลักในการพัฒนา
 - **Gemini API**: AI สำหรับปรับปรุงข้อความในโหมด Translation (ตัวเลือก)

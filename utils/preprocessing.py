@@ -39,10 +39,13 @@ def preprocess_frame(frame, apply_skeleton=True, landmarks=None):
             processed = draw_skeleton_overlay(resized, landmarks)
     
     # Step 3: Convert BGR to RGB (required by most pretrained models)
-    # ResNet50, VGG, MobileNet all expect RGB input
+    # MobileNetV2, ResNet50, VGG, etc. all expect RGB input
     processed_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
     
     # Step 4: Apply model-specific preprocessing
+    # MobileNetV2: Scales pixel values to [-1, 1] range
+    # ResNet50: Caffe-style mean subtraction (BGR mean: [103.939, 116.779, 123.68])
+    # VGG: Similar to ResNet50
     # This handles color mode, normalization, mean subtraction automatically
     preprocess_fn = get_preprocess_function()
     preprocessed = preprocess_fn(processed_rgb.astype('float32'))

@@ -16,10 +16,26 @@ class PreprocessConfig:
     
     # Preprocessing approach
     # Options: 'mobilenetv2', 'vgg16', 'vgg19', 'resnet50', 'inception', 'normal'
-    PREPROCESS_TYPE = 'resnet50'
+    # 
+    # MobileNetV2 (default):
+    #   - Lightweight and fast (optimized for mobile/edge devices)
+    #   - Good accuracy with lower computational cost
+    #   - Preprocessing: Scales to [-1, 1] range
+    #   - Best for: Real-time inference, resource-constrained environments
+    #
+    # ResNet50:
+    #   - Higher accuracy, more parameters
+    #   - Preprocessing: Caffe-style mean subtraction
+    #   - Best for: When accuracy is priority over speed
+    #
+    # VGG16/VGG19:
+    #   - Deep networks, high memory usage
+    #   - Preprocessing: Caffe-style mean subtraction
+    #   - Best for: Transfer learning with sufficient resources
+    PREPROCESS_TYPE = 'mobilenetv2'  # Changed from 'resnet50' to 'mobilenetv2'
     
     # Color mode (NOT USED when PREPROCESS_TYPE is a pretrained model)
-    # Pretrained models (resnet50, vgg16, etc.) handle color conversion internally
+    # Pretrained models (resnet50, vgg16, mobilenetv2, etc.) handle color conversion internally
     # Only used when PREPROCESS_TYPE = 'normal'
     # Options: 'rgb', 'bgr', 'grayscale'
     COLOR_MODE = 'rgb'

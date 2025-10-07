@@ -111,6 +111,13 @@
 - Model conversion
 - **Best for:** Using different frameworks
 
+#### **[MOBILENETV2_PREPROCESSING.md](MOBILENETV2_PREPROCESSING.md)** - MobileNetV2 Guide ⭐ NEW
+- Why MobileNetV2 preprocessing
+- Performance comparison
+- Training with MobileNetV2
+- Switching between models
+- **Best for:** Understanding preprocessing and optimization
+
 ---
 
 ### 🎨 Features & Customization
@@ -166,6 +173,7 @@
 | **Understand the project** | [README.md](README.md) |
 | **Train my own model** | [TRAINING_GUIDE.md](TRAINING_GUIDE.md) |
 | **Use PyTorch/ONNX** | [MULTI_FRAMEWORK_GUIDE.md](MULTI_FRAMEWORK_GUIDE.md) |
+| **Optimize performance** | [MOBILENETV2_PREPROCESSING.md](MOBILENETV2_PREPROCESSING.md) ⭐ |
 | **Setup Gemini API** | [.env.example](.env.example) + [ENV_SETUP_GUIDE.md](ENV_SETUP_GUIDE.md) |
 | **Use translation mode** | [TRANSLATION_MODE_GUIDE.md](TRANSLATION_MODE_GUIDE.md) |
 | **Change skeleton colors** | [SKELETON_COLOR_GUIDE.md](SKELETON_COLOR_GUIDE.md) |
