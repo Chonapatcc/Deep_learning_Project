@@ -1,6 +1,6 @@
 """
 Model loading utilities for ASL Fingerspelling Trainer
-Supports: TensorFlow/Keras (.h5, .keras), PyTorch (.pt, .pth), ONNX (.onnx)
+Supports: TensorFlow/Keras (.h5, .keras), PyTorch (.pt, .pth, landmark-based), ONNX (.onnx)
 """
 
 import streamlit as st
@@ -8,6 +8,10 @@ import mediapipe as mp
 import os
 import pickle
 import numpy as np
+
+# Import configuration
+import config
+ModelConfig = config.ModelConfig
 
 # Try to import TensorFlow/Keras
 try:
@@ -20,9 +24,19 @@ except ImportError:
 try:
     import torch
     import torch.nn as nn
+    import torch.nn.functional as F
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
+
+# Try to import PyTorch ASL classes
+try:
+    from pytorch_asl.models.classifier import ASLClassifier
+    from pytorch_asl.controllers.predictor import Predictor
+    PYTORCH_ASL_AVAILABLE = True
+except ImportError as e:
+    PYTORCH_ASL_AVAILABLE = False
+    PYTORCH_ASL_IMPORT_ERROR = str(e)
 
 # Try to import ONNX Runtime
 try:
@@ -51,6 +65,45 @@ def init_mediapipe():
         min_tracking_confidence=0.5
     )
     return hands, mp_drawing, mp_hands
+
+
+@st.cache_resource
+def load_pytorch_landmark_model(model_path, encoder_path, device='auto'):
+    """
+    Load PyTorch landmark-based ASL model (from pytorch_asl package)
+    
+    Returns:
+        Predictor instance or None if failed
+    """
+    if not TORCH_AVAILABLE:
+        st.error("❌ PyTorch not installed")
+        st.info("📦 Install with: `pip install torch torchvision`")
+        st.code("pip install torch torchvision", language="bash")
+        return None
+    
+    if not PYTORCH_ASL_AVAILABLE:
+        st.error("❌ PyTorch ASL package import failed")
+        if 'PYTORCH_ASL_IMPORT_ERROR' in globals():
+            st.error(f"Import error: {PYTORCH_ASL_IMPORT_ERROR}")
+        st.info("📁 Check that pytorch_asl/ folder exists with all required files")
+        st.info("💡 Try: `pip install mediapipe scikit-learn`")
+        return None
+    
+    try:
+        # Auto-detect device
+        if device == 'auto':
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        
+        # Load predictor
+        predictor = Predictor(model_path, encoder_path, device=device)
+        
+        return predictor
+        
+    except Exception as e:
+        st.error(f"❌ Failed to load PyTorch landmark model: {e}")
+        import traceback
+        st.code(traceback.format_exc(), language="python")
+        return None
 
 
 @st.cache_resource
@@ -241,25 +294,75 @@ def load_model(model_name=None):
     }
 
 
-# Backward compatibility wrapper
 @st.cache_resource
 def load_models():
     """
-    Backward compatibility wrapper for load_model()
-    Returns dict with 'cnn_model' key for legacy code
-    """
-    result = load_model()
-    if result is None:
-        return None
+    Load model based on ModelConfig.MODEL_TYPE
+    Supports both TensorFlow (image-based CNN) and PyTorch (landmark-based)
     
-    # Convert to legacy format
-    return {
-        'cnn_model': result['model'],
-        'label_encoder': result['label_encoder'],
-        'model_type': 'cnn',
-        'ml_model': None,  # No longer supported
-        'framework': result.get('framework', 'tensorflow')
-    }
+    Returns dict with appropriate structure:
+    - PyTorch: {'model_type': 'pytorch_landmark', 'predictor': Predictor, 'label_encoder': LabelEncoder}
+    - TensorFlow: {'model_type': 'cnn', 'cnn_model': model, 'label_encoder': LabelEncoder, 'framework': str}
+    """
+    try:
+        model_type = ModelConfig.MODEL_TYPE.lower()
+    except AttributeError as e:
+        st.error(f"⚠️ Configuration error: {e}")
+        st.info("💡 Make sure config.py has ModelConfig class with MODEL_TYPE attribute")
+        # Try to reimport config
+        import importlib
+        importlib.reload(config)
+        model_type = config.ModelConfig.MODEL_TYPE.lower()
+    
+    if model_type == 'pytorch':
+        st.info("🔧 Loading PyTorch landmark-based model...")
+        
+        # Load PyTorch landmark model using Predictor
+        predictor = load_pytorch_landmark_model(
+            ModelConfig.PYTORCH_MODEL_PATH,
+            ModelConfig.PYTORCH_LABEL_ENCODER_PATH,
+            device=ModelConfig.PYTORCH_DEVICE
+        )
+        
+        if predictor is None:
+            st.error("❌ Failed to load PyTorch model")
+            return None
+        
+        st.success(f"✅ PyTorch model loaded successfully ({len(predictor.label_encoder.classes_)} classes)")
+        
+        return {
+            'model_type': 'pytorch_landmark',
+            'predictor': predictor,
+            'label_encoder': predictor.label_encoder,
+            'framework': 'pytorch',
+            'ml_model': None  # For backward compatibility
+        }
+    
+    elif model_type == 'tensorflow':
+        st.info("🔧 Loading TensorFlow CNN model...")
+        
+        # Load TensorFlow CNN model using existing load_model()
+        result = load_model(ModelConfig.TF_MODEL_PATH)
+        
+        if result is None:
+            st.error("❌ Failed to load TensorFlow model")
+            return None
+        
+        st.success(f"✅ TensorFlow model loaded successfully")
+        
+        # Convert to legacy format for backward compatibility
+        return {
+            'cnn_model': result['model'],
+            'label_encoder': result['label_encoder'],
+            'model_type': 'cnn',
+            'ml_model': None,  # No longer supported
+            'framework': result.get('framework', 'tensorflow')
+        }
+    
+    else:
+        st.error(f"❌ Unknown MODEL_TYPE: {ModelConfig.MODEL_TYPE}")
+        st.info("💡 Set ModelConfig.MODEL_TYPE to 'tensorflow' or 'pytorch' in config.py")
+        return None
 
 
 def predict_with_model(model_data, input_data):

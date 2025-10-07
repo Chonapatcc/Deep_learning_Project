@@ -57,6 +57,85 @@ def preprocess_frame(frame, apply_skeleton=True, landmarks=None):
     return preprocessed
 
 
+def preprocess_frame_ensemble(frame, apply_skeleton=True, landmarks=None):
+    """
+    Enhanced preprocessing with ensemble augmentations for better accuracy
+    Creates multiple variations: normal, zoom in/out, brighter, darker
+    
+    Args:
+        frame: Raw BGR frame from camera
+        apply_skeleton: Whether to apply skeleton (from config)
+        landmarks: MediaPipe hand landmarks (optional)
+        
+    Returns:
+        List of preprocessed frames for ensemble prediction
+    """
+    resize_dim = get_resize_dimensions()
+    
+    # Base processed image with skeleton
+    processed = cv2.resize(frame, resize_dim)
+    if should_apply_skeleton() and landmarks is not None:
+        if is_skeleton_only():
+            processed = draw_skeleton_only(processed, landmarks)
+        else:
+            processed = draw_skeleton_overlay(processed, landmarks)
+    
+    # Create ensemble variations
+    variations = []
+    
+    # 1. Original (normal)
+    variations.append(processed.copy())
+    
+    # 2. Zoom In (1.2x) - crop center and resize
+    h, w = processed.shape[:2]
+    crop_size = int(min(h, w) / 1.2)
+    start_y = (h - crop_size) // 2
+    start_x = (w - crop_size) // 2
+    zoomed_in = processed[start_y:start_y+crop_size, start_x:start_x+crop_size]
+    zoomed_in = cv2.resize(zoomed_in, resize_dim)
+    variations.append(zoomed_in)
+    
+    # 3. Zoom Out (0.8x) - add padding
+    new_size = int(min(h, w) * 0.8)
+    resized_small = cv2.resize(processed, (new_size, new_size))
+    zoomed_out = np.zeros((resize_dim[1], resize_dim[0], 3), dtype=np.uint8)
+    start_y = (resize_dim[1] - new_size) // 2
+    start_x = (resize_dim[0] - new_size) // 2
+    zoomed_out[start_y:start_y+new_size, start_x:start_x+new_size] = resized_small
+    variations.append(zoomed_out)
+    
+    # 4. Brighter (+30)
+    brighter = cv2.add(processed, np.ones(processed.shape, dtype=np.uint8) * 30)
+    variations.append(brighter)
+    
+    # 5. Darker (-30)
+    darker = cv2.subtract(processed, np.ones(processed.shape, dtype=np.uint8) * 30)
+    variations.append(darker)
+    
+    # 6. Higher Contrast
+    contrast = cv2.convertScaleAbs(processed, alpha=1.3, beta=0)
+    variations.append(contrast)
+    
+    # Preprocess all variations
+    preprocessed_variations = []
+    preprocess_fn = get_preprocess_function()
+    
+    for variation in variations:
+        # Convert BGR to RGB
+        variation_rgb = cv2.cvtColor(variation, cv2.COLOR_BGR2RGB)
+        
+        # Apply pretrained preprocessing
+        preprocessed = preprocess_fn(variation_rgb.astype('float32'))
+        
+        # Add batch dimension
+        if len(preprocessed.shape) == 3:
+            preprocessed = np.expand_dims(preprocessed, axis=0)
+        
+        preprocessed_variations.append(preprocessed)
+    
+    return preprocessed_variations
+
+
 def draw_skeleton_overlay(image, landmarks):
     """
     Draw skeleton overlay on image (Approach 2)

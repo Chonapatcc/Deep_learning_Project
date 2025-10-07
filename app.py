@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 import config
 from config import (
     PreprocessConfig, HandDetectionConfig, InferenceConfig,
-    ModelConfig, PracticeModeConfig, TestModeConfig,
+    ModelConfig, PracticeModeConfig, TestModeConfig, UIConfig,
     get_preprocess_function, get_resize_dimensions, get_color_conversion,
     should_apply_skeleton, is_skeleton_only
 )
@@ -26,7 +26,7 @@ from config import (
 # Import utility functions
 from utils.model_loader import init_mediapipe, load_models
 from utils.prediction import predict_letter
-from utils.hand_processing import extract_keypoints, is_in_roi, calculate_bbox
+from utils.hand_processing import extract_keypoints, calculate_bbox  # Removed is_in_roi - now using full image
 from utils.letter_data import get_letter_instructions
 
 # Load environment variables from .env file
@@ -143,6 +143,53 @@ ALPHABET = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 # Load models on startup
 MODELS_DATA = load_models()
 
+
+def predict_asl(frame, hand_landmarks, keypoint_buffer, alphabet):
+    """
+    Unified prediction function that works with both TensorFlow and PyTorch models
+    
+    Args:
+        frame: Current camera frame (for PyTorch landmark extraction)
+        hand_landmarks: MediaPipe hand landmarks
+        keypoint_buffer: Buffer of keypoints (for TensorFlow)
+        alphabet: List of possible characters
+    
+    Returns:
+        tuple: (predicted_letter, confidence)
+    """
+    if MODELS_DATA is None:
+        return None, 0.0
+    
+    model_type = MODELS_DATA.get('model_type')
+    
+    if model_type == 'pytorch_landmark':
+        # PyTorch: Use Predictor.predict_frame() directly
+        # It handles MediaPipe extraction internally
+        predictor = MODELS_DATA['predictor']
+        try:
+            predicted_letter, confidence = predictor.predict_frame(frame)
+            # Ensure confidence is never None
+            if confidence is None:
+                confidence = 0.0
+            return predicted_letter, confidence
+        except Exception as e:
+            st.error(f"PyTorch prediction error: {e}")
+            return None, 0.0
+    
+    elif model_type == 'cnn':
+        # TensorFlow: Use existing predict_letter() function
+        return predict_letter(
+            keypoint_buffer,
+            MODELS_DATA,
+            alphabet,
+            landmarks=hand_landmarks
+        )
+    
+    else:
+        st.error(f"Unknown model type: {model_type}")
+        return None, 0.0
+
+
 # Main app
 def main():
     # Header
@@ -152,6 +199,32 @@ def main():
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
+        
+        # Model Type Selector
+        st.markdown("### 🤖 Model Configuration")
+        
+        # Display current model info
+        if MODELS_DATA:
+            current_model = MODELS_DATA.get('model_type', 'Unknown')
+            framework = MODELS_DATA.get('framework', 'Unknown')
+            
+            if current_model == 'pytorch_landmark':
+                st.success(f"✅ PyTorch (Landmark-based)")
+                st.caption("Fast, uses hand landmarks")
+            elif current_model == 'cnn':
+                st.success(f"✅ TensorFlow (Image-based CNN)")
+                st.caption("Slower, uses image preprocessing")
+            
+            # Show classes
+            if 'label_encoder' in MODELS_DATA:
+                num_classes = len(MODELS_DATA['label_encoder'].classes_)
+                st.caption(f"📊 {num_classes} classes")
+        else:
+            st.error("❌ No model loaded")
+        
+        st.caption(f"💡 To change model: Edit `MODEL_TYPE` in `config.py`")
+        
+        st.markdown("---")
         
         mode = st.radio(
             "เลือกโหมด",
@@ -485,14 +558,14 @@ def run_test_detection(target_letter):
                 
                 # Check if enough data
                 if len(st.session_state.keypoint_buffer) >= 15:
-                    predicted_letter, confidence = predict_letter(
-                        st.session_state.keypoint_buffer, 
-                        MODELS_DATA, 
-                        ALPHABET,
-                        landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
+                    predicted_letter, confidence = predict_asl(
+                        frame,
+                        hand_landmarks,
+                        st.session_state.keypoint_buffer,
+                        ALPHABET
                     )
                     
-                    if predicted_letter and confidence >= 0.75:
+                    if predicted_letter and confidence is not None and confidence >= 0.75:
                         if predicted_letter == target_letter:
                             detection_frames += 1
                             progress = int((detection_frames / required_frames) * 100)
@@ -520,12 +593,14 @@ def run_test_detection(target_letter):
                         feedback_message = "⏳ กำลังตรวจจับ..."
                         feedback_class = "feedback-warning"
                 
-                # Draw ROI
-                h, w = frame.shape[:2]
-                cv2.rectangle(frame, (int(w*0.2), int(h*0.1)), (int(w*0.8), int(h*0.8)), (0, 255, 0), 2)
+                # Visual guide frame (optional - removed ROI restriction)
+                # Full image is now used for prediction
+                # Uncomment below to show guide rectangle:
+                # h, w = frame.shape[:2]
+                # cv2.rectangle(frame, (int(w*0.2), int(h*0.1)), (int(w*0.8), int(h*0.8)), (0, 255, 0), 2)
         else:
             detection_frames = 0
-            feedback_message = "✋ ไม่พบมือ - กรุณาวางมือในกรอบ"
+            feedback_message = "✋ ไม่พบมือ - กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
         
         # Display
@@ -609,27 +684,24 @@ def run_webcam_detection():
                 if len(st.session_state.keypoint_buffer) > 60:
                     st.session_state.keypoint_buffer.pop(0)
                 
-                # Check bounding box
+                # Check bounding box (only for size check, no ROI restriction)
                 bbox = calculate_bbox(hand_landmarks)
-                in_roi = is_in_roi(bbox)
                 hand_size = max(bbox['width'], bbox['height'])
                 
-                if not in_roi:
-                    feedback_message = "⚠️ มืออยู่นอกพื้นที่ กรุณาวางมือให้อยู่กลางกรอบ"
-                    feedback_class = "feedback-warning"
-                elif hand_size < 0.2:
+                # Removed ROI check - now uses full image for prediction
+                if hand_size < 0.2:
                     feedback_message = "🔍 มือเล็กไป กรุณาเข้าใกล้กล้อง"
                     feedback_class = "feedback-warning"
                 elif len(st.session_state.keypoint_buffer) >= 15:
                     # Predict
-                    predicted_letter, confidence = predict_letter(
-                        st.session_state.keypoint_buffer, 
-                        MODELS_DATA, 
-                        ALPHABET,
-                        landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
+                    predicted_letter, confidence = predict_asl(
+                        frame,
+                        hand_landmarks,
+                        st.session_state.keypoint_buffer,
+                        ALPHABET
                     )
                     
-                    if predicted_letter and confidence >= 0.7:
+                    if predicted_letter and confidence is not None and confidence >= 0.7:
                         is_correct = predicted_letter == st.session_state.current_letter
                         
                         if is_correct:
@@ -654,14 +726,17 @@ def run_webcam_detection():
                     feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
                     feedback_class = "feedback-warning"
                 
-                # Draw ROI box
-                h, w = frame.shape[:2]
-                cv2.rectangle(frame, 
-                            (int(w*0.2), int(h*0.1)), 
-                            (int(w*0.8), int(h*0.8)), 
-                            (0, 255, 0), 2)
+                # Optional: Draw visual guide rectangle (configurable)
+                # Full image is used for prediction (ROI restriction removed)
+                if PracticeModeConfig.SHOW_ROI_GUIDE:
+                    h, w = frame.shape[:2]
+                    cv2.rectangle(frame, 
+                                (int(w * PracticeModeConfig.ROI_LEFT), int(h * PracticeModeConfig.ROI_TOP)), 
+                                (int(w * PracticeModeConfig.ROI_RIGHT), int(h * PracticeModeConfig.ROI_BOTTOM)), 
+                                PracticeModeConfig.ROI_COLOR, 
+                                PracticeModeConfig.ROI_THICKNESS)
         else:
-            feedback_message = "✋ ไม่พบมือ กรุณาวางมือในกรอบ"
+            feedback_message = "✋ ไม่พบมือ กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
         
         # Display frame
@@ -865,21 +940,21 @@ def show_translation_mode():
                 if len(st.session_state.translation_buffer) > 30:
                     st.session_state.translation_buffer.pop(0)
                 
-                # Check hand position
+                # Check hand size (removed ROI restriction for full image prediction)
                 bbox = calculate_bbox(hand_landmarks)
-                in_roi = is_in_roi(bbox)
                 
-                if in_roi and bbox['width'] >= 0.15 and bbox['height'] >= 0.15:
+                # Removed ROI check - now uses full image for prediction
+                if bbox['width'] >= 0.15 and bbox['height'] >= 0.15:
                     if len(st.session_state.translation_buffer) >= 15:
                         # Predict letter
-                        predicted_letter, confidence = predict_letter(
-                            st.session_state.translation_buffer, 
-                            MODELS_DATA, 
-                            ALPHABET,
-                            landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
+                        predicted_letter, confidence = predict_asl(
+                            frame,
+                            hand_landmarks,
+                            st.session_state.translation_buffer,
+                            ALPHABET
                         )
                         
-                        if predicted_letter and confidence >= 0.75:
+                        if predicted_letter and confidence is not None and confidence >= 0.75:
                             # Confirmation logic
                             if predicted_letter == last_detected_letter:
                                 detection_count += 1

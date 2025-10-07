@@ -10,7 +10,7 @@ from .model_loader import (
     get_model_input_shape
 )
 from .prediction import predict_letter
-from .hand_processing import extract_keypoints, is_in_roi, calculate_bbox
+from .hand_processing import extract_keypoints, calculate_bbox
 from .letter_data import get_letter_instructions
 
 __all__ = [
@@ -21,7 +21,6 @@ __all__ = [
     'get_model_input_shape',
     'predict_letter',
     'extract_keypoints',
-    'is_in_roi',
     'calculate_bbox',
     'get_letter_instructions'
 ]

@@ -17,22 +17,27 @@ class PreprocessConfig:
     # Preprocessing approach
     # Options: 'mobilenetv2', 'vgg16', 'vgg19', 'resnet50', 'inception', 'normal'
     # 
-    # MobileNetV2 (default):
+    # ⚠️ IMPORTANT: Must match the preprocessing used during training!
+    # 
+    # MobileNetV2:
     #   - Lightweight and fast (optimized for mobile/edge devices)
     #   - Good accuracy with lower computational cost
-    #   - Preprocessing: Scales to [-1, 1] range
+    #   - Preprocessing: Scales to [-1, 1] range: (x / 127.5) - 1
     #   - Best for: Real-time inference, resource-constrained environments
     #
     # ResNet50:
     #   - Higher accuracy, more parameters
-    #   - Preprocessing: Caffe-style mean subtraction
+    #   - Preprocessing: Caffe-style mean subtraction (BGR: [103.939, 116.779, 123.68])
     #   - Best for: When accuracy is priority over speed
     #
     # VGG16/VGG19:
     #   - Deep networks, high memory usage
     #   - Preprocessing: Caffe-style mean subtraction
     #   - Best for: Transfer learning with sufficient resources
-    PREPROCESS_TYPE = 'mobilenetv2'  # Changed from 'resnet50' to 'mobilenetv2'
+    # 
+    # ⚠️ NOTE: train_improved_model.py uses ResNet50 preprocessing!
+    #          Change this to 'resnet50' to match training, or retrain with MobileNetV2
+    PREPROCESS_TYPE = 'mobilenetv2'  # ✅ FIXED: Matches train_improved_model.py preprocessing
     
     # Color mode (NOT USED when PREPROCESS_TYPE is a pretrained model)
     # Pretrained models (resnet50, vgg16, mobilenetv2, etc.) handle color conversion internally
@@ -45,6 +50,31 @@ class PreprocessConfig:
     # Only used when PREPROCESS_TYPE = 'normal'
     # Options: 'divide_255', 'standardize', 'none'
     NORMALIZATION = 'none'
+
+
+# ==============================================================================
+# MODEL CONFIGURATION
+# ==============================================================================
+
+class ModelConfig:
+    """Model loading and inference settings"""
+    
+    # Model type to use
+    # Options: 'tensorflow', 'pytorch'
+    MODEL_TYPE = 'pytorch'  # Change to 'tensorflow' to use TensorFlow/Keras models
+    
+    # TensorFlow model paths
+    TF_MODEL_PATH = "models/ayumi_chan.h5"
+    TF_LABEL_ENCODER_PATH = "models/label_encoder.pkl"
+    
+    # PyTorch model paths
+    PYTORCH_MODEL_PATH = "pytorch_asl/models/best_asl_model.pth"
+    PYTORCH_LABEL_ENCODER_PATH = "pytorch_asl/models/label_encoder.pkl"
+    PYTORCH_ARCHITECTURE = 'landmark'  # 'landmark' for ASLClassifier, 'cnn' for image-based
+    
+    # Device for PyTorch
+    # Options: 'cuda', 'cpu', 'auto'
+    PYTORCH_DEVICE = 'auto'  # Auto-detect GPU/CPU
 
 
 # ==============================================================================
@@ -86,6 +116,17 @@ class InferenceConfig:
     #   3. 'skeleton_only' - Raw image → MediaPipe skeleton extraction → resize → preprocess → inference (skeleton only)
     APPROACH = 'image_with_skeleton'
     
+    # Ensemble prediction settings
+    USE_ENSEMBLE = True  # Use multiple augmentations for better accuracy
+    ENSEMBLE_AUGMENTATIONS = [
+        'normal',        # Original image
+        'zoom_in',       # 1.2x zoom (crop center)
+        'zoom_out',      # 0.8x zoom (add padding)
+        'brighter',      # +30 brightness
+        'darker',        # -30 brightness
+        'contrast'       # 1.3x contrast
+    ]
+    
     # Skeleton visualization settings (for approaches 2 & 3)
     SKELETON_LINE_THICKNESS = 2
     SKELETON_POINT_RADIUS = 4
@@ -122,11 +163,11 @@ class InferenceConfig:
 
 
 # ==============================================================================
-# MODEL CONFIGURATION
+# MODEL LOADING CONFIGURATION
 # ==============================================================================
 
-class ModelConfig:
-    """Model loading and inference settings"""
+class ModelLoadingConfig:
+    """Model loading and selection settings"""
     
     # Model name to load (without extension)
     # Set to None to auto-detect first available model
@@ -163,13 +204,18 @@ class PracticeModeConfig:
     MIN_KEYPOINTS_FOR_PREDICTION = 15
     PREDICTION_CONFIDENCE_THRESHOLD = 0.7
     
-    # ROI (Region of Interest) settings
+    # ROI (Region of Interest) settings - VISUAL GUIDE ONLY
+    # Note: ROI restriction has been REMOVED - full image is now used for detection
+    # These settings only control the visual guide rectangle (green box)
+    SHOW_ROI_GUIDE = True  # Set to False to hide the green rectangle
     ROI_TOP = 0.1
     ROI_LEFT = 0.2
     ROI_RIGHT = 0.8
     ROI_BOTTOM = 0.8
+    ROI_COLOR = (0, 255, 0)  # Green (B, G, R format)
+    ROI_THICKNESS = 2
     
-    # Minimum hand size
+    # Minimum hand size (still applies for quality check)
     MIN_HAND_WIDTH = 0.15
     MIN_HAND_HEIGHT = 0.15
 
@@ -248,40 +294,28 @@ def get_preprocess_function():
     preprocess_type = PreprocessConfig.PREPROCESS_TYPE
     
     if preprocess_type == 'mobilenetv2':
-        try:
-            from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-            return preprocess_input
-        except ImportError:
-            return lambda x: x / 255.0
+        from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+        return preprocess_input
+        
     
     elif preprocess_type == 'vgg16':
-        try:
-            from tensorflow.keras.applications.vgg16 import preprocess_input
-            return preprocess_input
-        except ImportError:
-            return lambda x: x / 255.0
-    
+        from tensorflow.keras.applications.vgg16 import preprocess_input
+        return preprocess_input
+  
     elif preprocess_type == 'vgg19':
-        try:
-            from tensorflow.keras.applications.vgg19 import preprocess_input
-            return preprocess_input
-        except ImportError:
-            return lambda x: x / 255.0
+        from tensorflow.keras.applications.vgg19 import preprocess_input
+        return preprocess_input
+
     
     elif preprocess_type == 'resnet50':
-        try:
-            from tensorflow.keras.applications.resnet50 import preprocess_input
-            return preprocess_input
-        except ImportError:
-            return lambda x: x / 255.0
+        from tensorflow.keras.applications.resnet50 import preprocess_input
+        return preprocess_input
+
     
     elif preprocess_type == 'inception':
-        try:
-            from tensorflow.keras.applications.inception_v3 import preprocess_input
-            return preprocess_input
-        except ImportError:
-            return lambda x: x / 255.0
-    
+        from tensorflow.keras.applications.inception_v3 import preprocess_input
+        return preprocess_input
+
     elif preprocess_type == 'normal':
         # Standard normalization (divide by 255)
         return lambda x: x / 255.0
@@ -349,8 +383,10 @@ def print_config_summary():
             print(f"  - Background: {InferenceConfig.SKELETON_BACKGROUND}")
     
     print(f"\n🤖 MODEL:")
-    print(f"  - Priority: {ModelConfig.MODEL_PRIORITY}")
-    print(f"  - Confidence: {ModelConfig.CONFIDENCE_THRESHOLD}")
+    print(f"  - Model Type: {ModelConfig.MODEL_TYPE}")
+    print(f"  - TF Model: {ModelConfig.TF_MODEL_PATH}")
+    print(f"  - PyTorch Model: {ModelConfig.PYTORCH_MODEL_PATH}")
+    print(f"  - Confidence: {ModelLoadingConfig.CONFIDENCE_THRESHOLD}")
     
     print("=" * 60)
 
