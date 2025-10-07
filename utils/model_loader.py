@@ -1,20 +1,37 @@
 """
 Model loading utilities for ASL Fingerspelling Trainer
+Supports: TensorFlow/Keras (.h5, .keras), PyTorch (.pt, .pth), ONNX (.onnx)
 """
 
 import streamlit as st
 import mediapipe as mp
 import os
 import pickle
+import numpy as np
 
-# Try to import deep learning libraries
+# Try to import TensorFlow/Keras
 try:
     from tensorflow import keras
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
 
-# Try to import sklearn
+# Try to import PyTorch
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+# Try to import ONNX Runtime
+try:
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
+except ImportError:
+    ONNX_AVAILABLE = False
+
+# Try to import sklearn for label encoder
 try:
     from sklearn.preprocessing import LabelEncoder
     SKLEARN_AVAILABLE = True
@@ -37,100 +54,327 @@ def init_mediapipe():
 
 
 @st.cache_resource
-def load_models():
-    """Load pre-trained models from saved files"""
+def load_model(model_name=None):
+    """
+    Load a deep learning model by name
+    Supports: TensorFlow (.h5, .keras), PyTorch (.pt, .pth), ONNX (.onnx)
     
-    models = {
-        'ml_model': None,
-        'cnn_model': None,
-        'label_encoder': None,
-        'model_type': None
-    }
+    Args:
+        model_name: Name of model file (e.g., 'resnet50_improved', 'model.pt')
+                   If None, will try to load from config or find first available model
     
-    # Try to load ML model (RandomForest .pkl)
-    ml_model_path = "models/asl_model.pkl"
-    if os.path.exists(ml_model_path) and SKLEARN_AVAILABLE:
-        try:
-            with open(ml_model_path, 'rb') as f:
-                model_data = pickle.load(f)
-            models['ml_model'] = model_data['model']
-            models['label_encoder'] = model_data['label_encoder']
-            models['model_type'] = 'ml'
-            st.success("✅ โหลด ML Model (RandomForest) สำเร็จ!")
-        except Exception as e:
-            st.warning(f"⚠️ ไม่สามารถโหลด ML Model: {e}")
-    
-    # Try to load CNN model from .pkl file first
-    cnn_pkl_path = "models/asl_cnn_model.pkl"
-    if os.path.exists(cnn_pkl_path):
-        try:
-            with open(cnn_pkl_path, 'rb') as f:
-                cnn_data = pickle.load(f)
-            if TF_AVAILABLE:
-                models['cnn_model'] = cnn_data.get('model')
-                models['label_encoder'] = cnn_data.get('label_encoder')
-                models['model_type'] = 'cnn'
-                st.success(f"✅ โหลด CNN Model จาก .pkl สำเร็จ!")
-        except Exception as e:
-            st.warning(f"⚠️ ไม่สามารถโหลด CNN .pkl: {e}")
-    
-    # Try to load CNN model (TensorFlow .h5 or .keras)
-    if models['cnn_model'] is None:
-        cnn_model_paths = [
-            "models/trained_model_10epochs.h5",  # Your current model
+    Returns:
+        dict with 'model', 'label_encoder', 'model_name', 'model_type', 'framework'
+        or None if failed
+    """
+    # Get model paths to try
+    if model_name:
+        # User specified model name
+        if not any(model_name.endswith(ext) for ext in ['.h5', '.keras', '.pt', '.pth', '.onnx']):
+            # Try all extensions
+            model_paths = [
+                f"models/{model_name}.h5",
+                f"models/{model_name}.keras",
+                f"models/{model_name}.pt",
+                f"models/{model_name}.pth",
+                f"models/{model_name}.onnx"
+            ]
+        else:
+            model_paths = [f"models/{model_name}"]
+    else:
+        # Auto-detect: try common model names in priority order
+        model_paths = [
+            # TensorFlow/Keras models
+            "models/ayumi_chan.h5",
+            "models/resnet50_app2_2.h5",
+            "models/resnet50.h5",
+            "models/trained_model_10epochs.h5",
             "models/best_transfer_CNN.keras",
             "models/asl_cnn_model.h5",
             "models/asl_cnn_model.keras",
-            "models/asl_model.h5",
-            "models/asl_model.keras"
+            # PyTorch models
+            "models/resnet50_improved.pt",
+            "models/resnet50_improved.pth",
+            "models/resnet50.pt",
+            "models/resnet50.pth",
+            "models/asl_model.pt",
+            "models/asl_model.pth",
+            # ONNX models
+            "models/resnet50_improved.onnx",
+            "models/resnet50.onnx",
+            "models/asl_model.onnx"
         ]
-        
-        for cnn_path in cnn_model_paths:
-            if os.path.exists(cnn_path) and TF_AVAILABLE:
-                try:
-                    models['cnn_model'] = keras.models.load_model(cnn_path)
-                    models['model_type'] = 'cnn'
-                    st.success(f"✅ โหลด CNN Model ({os.path.basename(cnn_path)}) สำเร็จ!")
-                    
-                    # Load label encoder if exists
-                    label_encoder_path = cnn_path.replace('.h5', '_labels.pkl').replace('.keras', '_labels.pkl')
-                    if os.path.exists(label_encoder_path):
-                        with open(label_encoder_path, 'rb') as f:
-                            models['label_encoder'] = pickle.load(f)
-                    else:
-                        # Create default label encoder
-                        if SKLEARN_AVAILABLE:
-                            le = LabelEncoder()
-                            le.fit(list('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'))
-                            models['label_encoder'] = le
-                        
-                    break
-                except Exception as e:
-                    st.warning(f"⚠️ ไม่สามารถโหลด CNN Model ({cnn_path}): {e}")
     
-    # Check if any model was loaded
-    if models['ml_model'] is None and models['cnn_model'] is None:
-        # List what files are in models folder
-        model_files = []
+    # Try to load model
+    loaded_model = None
+    loaded_path = None
+    framework = None
+    
+    for model_path in model_paths:
+        if not os.path.exists(model_path):
+            continue
+        
+        model_basename = os.path.basename(model_path)
+        
+        try:
+            # Determine model type by extension
+            if model_path.endswith(('.h5', '.keras')):
+                # TensorFlow/Keras model
+                if not TF_AVAILABLE:
+                    st.warning(f"⚠️ TensorFlow not installed. Cannot load {model_basename}")
+                    continue
+                
+                loaded_model = keras.models.load_model(model_path)
+                framework = 'tensorflow'
+                st.success(f"✅ โหลด TensorFlow Model ({model_basename}) สำเร็จ!")
+                loaded_path = model_path
+                break
+                
+            elif model_path.endswith(('.pt', '.pth')):
+                # PyTorch model
+                if not TORCH_AVAILABLE:
+                    st.warning(f"⚠️ PyTorch not installed. Cannot load {model_basename}")
+                    continue
+                
+                # Load PyTorch model
+                loaded_model = torch.load(model_path, map_location='cpu')
+                
+                # If it's a state dict, need to know the architecture
+                if isinstance(loaded_model, dict):
+                    st.warning(f"⚠️ {model_basename} is a state_dict. Need model architecture to load.")
+                    continue
+                
+                # Set to eval mode
+                if isinstance(loaded_model, nn.Module):
+                    loaded_model.eval()
+                
+                framework = 'pytorch'
+                st.success(f"✅ โหลด PyTorch Model ({model_basename}) สำเร็จ!")
+                loaded_path = model_path
+                break
+                
+            elif model_path.endswith('.onnx'):
+                # ONNX model
+                if not ONNX_AVAILABLE:
+                    st.warning(f"⚠️ ONNX Runtime not installed. Cannot load {model_basename}")
+                    continue
+                
+                loaded_model = ort.InferenceSession(model_path)
+                framework = 'onnx'
+                st.success(f"✅ โหลด ONNX Model ({model_basename}) สำเร็จ!")
+                loaded_path = model_path
+                break
+                
+        except Exception as e:
+            st.warning(f"⚠️ ไม่สามารถโหลด {model_basename}: {e}")
+    
+    if loaded_model is None:
+        # List available models
+        available_models = []
         if os.path.exists("models"):
-            model_files = [f for f in os.listdir("models") if f.endswith(('.h5', '.keras', '.pkl'))]
+            available_models = [f for f in os.listdir("models") 
+                              if f.endswith(('.h5', '.keras', '.pt', '.pth', '.onnx')) 
+                              and not f.startswith('.')]
         
-        st.error(f"""❌ ไม่พบ Model ที่บันทึกไว้! 
+        # Check which frameworks are available
+        frameworks_status = []
+        if TF_AVAILABLE:
+            frameworks_status.append("✅ TensorFlow (.h5, .keras)")
+        else:
+            frameworks_status.append("❌ TensorFlow (.h5, .keras) - run: pip install tensorflow")
         
-📁 ไฟล์ที่พบในโฟลเดอร์ models:
-{chr(10).join(['  - ' + f for f in model_files]) if model_files else '  (ไม่พบไฟล์)'}
+        if TORCH_AVAILABLE:
+            frameworks_status.append("✅ PyTorch (.pt, .pth)")
+        else:
+            frameworks_status.append("❌ PyTorch (.pt, .pth) - run: pip install torch")
+        
+        if ONNX_AVAILABLE:
+            frameworks_status.append("✅ ONNX (.onnx)")
+        else:
+            frameworks_status.append("❌ ONNX (.onnx) - run: pip install onnxruntime")
+        
+        st.error(f"""❌ ไม่พบ Deep Learning Model!
+        
+📁 Models ที่มีในโฟลเดอร์:
+{chr(10).join(['  - ' + f for f in available_models]) if available_models else '  (ไม่พบไฟล์ model)'}
 
-✅ Model ที่รองรับ:
-  - models/trained_model_10epochs.h5 (CNN)
-  - models/best_transfer_CNN.keras (CNN)
-  - models/asl_cnn_model.h5 (CNN)
-  - models/asl_model.pkl (ML/RandomForest)
-        
+🔧 Frameworks ที่รองรับ:
+{chr(10).join(['  ' + f for f in frameworks_status])}
+
 💡 วิธีแก้ไข:
-  1. ตรวจสอบว่ามีไฟล์ model ในโฟลเดอร์ models/
-  2. ตรวจสอบว่าชื่อไฟล์ตรงกับรายการด้านบน
-  3. ถ้ายังไม่มี model ให้ train ใหม่ด้วย train_model.py
+  1. Train model ใหม่: python train_improved_model.py
+  2. หรือระบุชื่อ model ที่มีอยู่ในโฟลเดอร์ models/
+  3. ติดตั้ง framework ที่ต้องการ (ดูด้านบน)
+  4. ตรวจสอบว่าไฟล์ไม่เสียหาย
         """)
         return None
     
-    return models
+    # Load label encoder
+    label_encoder = None
+    # Try different label file extensions
+    label_extensions = ['.pkl', '_labels.pkl']
+    base_path = loaded_path.rsplit('.', 1)[0]  # Remove extension
+    
+    for ext in label_extensions:
+        label_encoder_path = base_path + ext
+        if os.path.exists(label_encoder_path):
+            try:
+                with open(label_encoder_path, 'rb') as f:
+                    label_encoder = pickle.load(f)
+                st.info(f"📋 โหลด Label Encoder: {len(label_encoder.classes_)} classes")
+                break
+            except Exception as e:
+                st.warning(f"⚠️ ไม่สามารถโหลด label encoder: {e}")
+    
+    # Create default label encoder if not found
+    if label_encoder is None and SKLEARN_AVAILABLE:
+        st.info("📋 สร้าง Default Label Encoder (0-9, A-Z)")
+        label_encoder = LabelEncoder()
+        label_encoder.fit(list('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+    
+    return {
+        'model': loaded_model,
+        'label_encoder': label_encoder,
+        'model_name': os.path.basename(loaded_path),
+        'model_type': 'cnn',  # For backward compatibility
+        'framework': framework  # 'tensorflow', 'pytorch', or 'onnx'
+    }
+
+
+# Backward compatibility wrapper
+@st.cache_resource
+def load_models():
+    """
+    Backward compatibility wrapper for load_model()
+    Returns dict with 'cnn_model' key for legacy code
+    """
+    result = load_model()
+    if result is None:
+        return None
+    
+    # Convert to legacy format
+    return {
+        'cnn_model': result['model'],
+        'label_encoder': result['label_encoder'],
+        'model_type': 'cnn',
+        'ml_model': None,  # No longer supported
+        'framework': result.get('framework', 'tensorflow')
+    }
+
+
+def predict_with_model(model_data, input_data):
+    """
+    Universal prediction function that works with any framework
+    
+    Args:
+        model_data: Dict returned from load_model() containing 'model' and 'framework'
+        input_data: Preprocessed input (numpy array, shape depends on model)
+    
+    Returns:
+        numpy array of predictions (probabilities for each class)
+    """
+    if model_data is None:
+        raise ValueError("Model data is None. Please load a model first.")
+    
+    model = model_data['model']
+    framework = model_data.get('framework', 'tensorflow')
+    
+    try:
+        if framework == 'tensorflow':
+            # TensorFlow/Keras prediction
+            predictions = model.predict(input_data, verbose=0)
+            return predictions
+            
+        elif framework == 'pytorch':
+            # PyTorch prediction
+            if not TORCH_AVAILABLE:
+                raise ImportError("PyTorch not available")
+            
+            # Convert numpy to torch tensor
+            if isinstance(input_data, np.ndarray):
+                input_tensor = torch.from_numpy(input_data).float()
+            else:
+                input_tensor = input_data
+            
+            # Move to same device as model
+            device = next(model.parameters()).device
+            input_tensor = input_tensor.to(device)
+            
+            # Predict
+            with torch.no_grad():
+                output = model(input_tensor)
+                
+                # Convert to numpy
+                if isinstance(output, torch.Tensor):
+                    predictions = output.cpu().numpy()
+                else:
+                    predictions = output
+            
+            return predictions
+            
+        elif framework == 'onnx':
+            # ONNX prediction
+            if not ONNX_AVAILABLE:
+                raise ImportError("ONNX Runtime not available")
+            
+            # Get input name
+            input_name = model.get_inputs()[0].name
+            
+            # Prepare input
+            if isinstance(input_data, np.ndarray):
+                input_data = input_data.astype(np.float32)
+            
+            # Run inference
+            outputs = model.run(None, {input_name: input_data})
+            predictions = outputs[0]
+            
+            return predictions
+            
+        else:
+            raise ValueError(f"Unknown framework: {framework}")
+            
+    except Exception as e:
+        st.error(f"❌ Prediction error ({framework}): {e}")
+        raise
+
+
+def get_model_input_shape(model_data):
+    """
+    Get expected input shape for a model
+    
+    Args:
+        model_data: Dict returned from load_model()
+    
+    Returns:
+        Tuple of input shape (e.g., (224, 224, 3))
+    """
+    if model_data is None:
+        return None
+    
+    model = model_data['model']
+    framework = model_data.get('framework', 'tensorflow')
+    
+    try:
+        if framework == 'tensorflow':
+            # TensorFlow/Keras
+            return model.input_shape[1:]  # Skip batch dimension
+            
+        elif framework == 'pytorch':
+            # PyTorch - try to get from first layer
+            if hasattr(model, 'input_shape'):
+                return model.input_shape
+            # Default for image models
+            return (224, 224, 3)
+            
+        elif framework == 'onnx':
+            # ONNX
+            input_shape = model.get_inputs()[0].shape
+            # Remove batch dimension and convert -1 to actual size
+            shape = tuple([s if isinstance(s, int) and s > 0 else 224 for s in input_shape[1:]])
+            return shape
+            
+    except Exception as e:
+        st.warning(f"⚠️ Could not determine input shape: {e}")
+        return (224, 224, 3)  # Default
+    
+    return (224, 224, 3)  # Default

@@ -6,8 +6,16 @@ import streamlit as st
 import cv2
 import numpy as np
 
+# Import configuration and preprocessing
+try:
+    from config import InferenceConfig, get_resize_dimensions, should_apply_skeleton
+    from utils.preprocessing import preprocess_frame
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
 
-def predict_letter(keypoints_sequence, models_data, alphabet):
+
+def predict_letter(keypoints_sequence, models_data, alphabet, landmarks=None):
     """
     Predict letter using trained model (ML or CNN)
     
@@ -15,6 +23,7 @@ def predict_letter(keypoints_sequence, models_data, alphabet):
         keypoints_sequence: List of keypoint arrays
         models_data: Dictionary containing loaded models
         alphabet: List of alphabet letters
+        landmarks: Hand landmarks (optional, for skeleton approaches)
         
     Returns:
         tuple: (predicted_letter, confidence)
@@ -48,28 +57,26 @@ def predict_letter(keypoints_sequence, models_data, alphabet):
             return predicted_letter, confidence
             
         elif model_type == 'cnn':
-            # CNN Model prediction (MobileNetV2 expects 224x224x3 images)
+            # CNN Model prediction
             model = models_data['cnn_model']
             
             # Check if we have image frames or keypoints
-            # For MobileNetV2, we need actual image data
             if hasattr(st.session_state, 'frame_buffer') and len(st.session_state.frame_buffer) > 0:
                 # Use the most recent frame
                 frame = st.session_state.frame_buffer[-1]
                 
-                # Preprocess for MobileNetV2
-                # Resize to 224x224
-                processed_frame = cv2.resize(frame, (224, 224))
-                
-                # Convert BGR to RGB if needed
-                if len(processed_frame.shape) == 3 and processed_frame.shape[2] == 3:
+                # Use new preprocessing based on config
+                if CONFIG_AVAILABLE:
+                    processed_frame = preprocess_frame(frame, 
+                                                      apply_skeleton=should_apply_skeleton(),
+                                                      landmarks=landmarks)
+                else:
+                    # Fallback to default preprocessing
+                    resize_dim = (224, 224)
+                    processed_frame = cv2.resize(frame, resize_dim)
                     processed_frame = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-                # Normalize to [0, 1] or use MobileNetV2 preprocessing
-                processed_frame = processed_frame.astype('float32') / 255.0
-                
-                # Add batch dimension: (224, 224, 3) -> (1, 224, 224, 3)
-                processed_frame = np.expand_dims(processed_frame, axis=0)
+                    processed_frame = processed_frame.astype('float32') / 255.0
+                    processed_frame = np.expand_dims(processed_frame, axis=0)
                 
                 # Predict
                 probabilities = model.predict(processed_frame, verbose=0)[0]
@@ -80,7 +87,6 @@ def predict_letter(keypoints_sequence, models_data, alphabet):
                 if label_encoder:
                     predicted_letter = label_encoder.inverse_transform([prediction])[0]
                 else:
-                    # Use alphabet index (A=0, B=1, ...)
                     predicted_letter = alphabet[prediction] if prediction < len(alphabet) else None
                 
                 return predicted_letter, confidence
@@ -109,7 +115,6 @@ def predict_letter(keypoints_sequence, models_data, alphabet):
                     
                     return predicted_letter, confidence
                 except Exception as e:
-                    # Model expects image input, not keypoints
                     st.warning(f"⚠️ CNN model expects image input. Please ensure frames are being captured.")
                     return None, 0.0
             

@@ -14,6 +14,15 @@ import glob
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import configuration
+import config
+from config import (
+    PreprocessConfig, HandDetectionConfig, InferenceConfig,
+    ModelConfig, PracticeModeConfig, TestModeConfig,
+    get_preprocess_function, get_resize_dimensions, get_color_conversion,
+    should_apply_skeleton, is_skeleton_only
+)
+
 # Import utility functions
 from utils.model_loader import init_mediapipe, load_models
 from utils.prediction import predict_letter
@@ -293,25 +302,70 @@ def show_letter_detail(letter):
     
     st.markdown("---")
     
-    # Action buttons
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🎯 เริ่มฝึกฝนตัวอักษรนี้", type="primary", use_container_width=True):
-            st.session_state.current_letter = letter
-            st.session_state.selected_learning_char = None
-            st.rerun()
-    with col2:
-        if st.button("← กลับไปเลือก", use_container_width=True):
-            st.session_state.selected_learning_char = None
-            st.rerun()
+    # Action buttons - only back button
+    if st.button("← กลับไปเลือก", use_container_width=True, key="back_from_detail"):
+        st.session_state.selected_learning_char = None
+        st.rerun()
 
 def show_practice_mode():
     """Practice Mode - Real-time practice with feedback"""
     char_type = "ตัวเลข" if st.session_state.current_letter.isdigit() else "ตัวอักษร"
     st.header(f"✋ โหมดฝึกฝน - {char_type} {st.session_state.current_letter}")
     
-    # Create two columns: Reference images and Practice area
-    col_ref, col_practice = st.columns([1, 2])
+    # Initialize practice start time if not exists
+    if 'practice_start_time' not in st.session_state:
+        st.session_state.practice_start_time = time.time()
+    
+    # Calculate elapsed time
+    elapsed_seconds = int(time.time() - st.session_state.practice_start_time)
+    elapsed_minutes = elapsed_seconds // 60
+    elapsed_secs = elapsed_seconds % 60
+    
+    # Display stats with timer (full width)
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        attempts = st.session_state.stats.get('attempts', 0)
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-value">{attempts}</div>
+            <div class="stat-label">ครั้งที่ลอง</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        correct = st.session_state.stats.get('correct', 0)
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-value">{correct}</div>
+            <div class="stat-label">ถูกต้อง</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        attempts = st.session_state.stats.get('attempts', 0)
+        correct = st.session_state.stats.get('correct', 0)
+        success_rate = (correct / attempts * 100) if attempts > 0 else 0
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-value">{success_rate:.1f}%</div>
+            <div class="stat-label">อัตราความสำเร็จ</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        # Real-time timer placeholder
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-value">{elapsed_minutes:02d}:{elapsed_secs:02d}</div>
+            <div class="stat-label">เวลาที่ใช้</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Create two columns: Reference images and Instructions
+    col_ref, col_inst = st.columns(2)
     
     with col_ref:
         st.markdown("### 📸 ตัวอย่างท่ามือ")
@@ -337,60 +391,31 @@ def show_practice_mode():
                 st.info("ไม่พบรูปตัวอย่าง")
         else:
             st.info("ไม่พบโฟลเดอร์ข้อมูล")
-        
+    
+    with col_inst:
         # Instructions
-        st.markdown("---")
         st.markdown("### 💡 วิธีทำท่า")
         instructions = get_letter_instructions(letter)
         st.info(instructions)
-    
-    with col_practice:
-        # Display stats
-        col1, col2, col3 = st.columns(3)
         
-        with col1:
-            attempts = st.session_state.stats.get('attempts', 0)
-            st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-value">{attempts}</div>
-                <div class="stat-label">ครั้งที่ลอง</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        correct = st.session_state.stats.get('correct', 0)
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{correct}</div>
-            <div class="stat-label">ถูกต้อง</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        attempts = st.session_state.stats.get('attempts', 0)
-        correct = st.session_state.stats.get('correct', 0)
-        success_rate = (correct / attempts * 100) if attempts > 0 else 0
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{success_rate:.1f}%</div>
-            <div class="stat-label">อัตราความสำเร็จ</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-        st.markdown("---")
-        
-        # Camera section
-        st.subheader("📷 Camera Feed")
-        run_camera = st.checkbox("เปิดกล้อง", value=False)
-        
-        if run_camera:
-            run_webcam_detection()
-        
-        if st.button("⏭️ ตัวอักษรถัดไป"):
+        # Next letter button
+        if st.button("⏭️ ตัวอักษรถัดไป", key="next_letter_btn", use_container_width=True):
             current_idx = ALPHABET.index(st.session_state.current_letter)
             next_idx = (current_idx + 1) % len(ALPHABET)
             st.session_state.current_letter = ALPHABET[next_idx]
+            # Clear buffers when switching
+            st.session_state.keypoint_buffer = []
+            st.session_state.frame_buffer = []
             st.rerun()
+    
+    st.markdown("---")
+    
+    # Camera section - FULL WIDTH like translation mode
+    st.markdown("### 📹 กล้อง")
+    run_camera = st.checkbox("เปิดกล้อง", value=False)
+    
+    if run_camera:
+        run_webcam_detection()
 
 def run_test_detection(target_letter):
     """Run camera detection for test mode with auto-skip"""
@@ -400,8 +425,8 @@ def run_test_detection(target_letter):
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
         st.error("❌ ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตใช้งานกล้อง")
@@ -436,8 +461,20 @@ def run_test_detection(target_letter):
         
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Draw landmarks
-                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                # Draw landmarks with different colors for points and lines
+                from config import InferenceConfig
+                point_color = InferenceConfig.SKELETON_POINT_COLOR
+                line_color = InferenceConfig.SKELETON_LINE_COLOR
+                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
+                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
+                
+                mp_drawing.draw_landmarks(
+                    frame, 
+                    hand_landmarks, 
+                    mp_hands.HAND_CONNECTIONS,
+                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
+                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
+                )
                 
                 # Extract keypoints
                 keypoints = extract_keypoints(hand_landmarks)
@@ -451,7 +488,8 @@ def run_test_detection(target_letter):
                     predicted_letter, confidence = predict_letter(
                         st.session_state.keypoint_buffer, 
                         MODELS_DATA, 
-                        ALPHABET
+                        ALPHABET,
+                        landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
                     )
                     
                     if predicted_letter and confidence >= 0.75:
@@ -513,8 +551,8 @@ def run_webcam_detection():
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
         st.error("❌ ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตใช้งานกล้อง")
@@ -547,12 +585,20 @@ def run_webcam_detection():
         feedback_class = "feedback-warning"
         
         if results.multi_hand_landmarks:
-            # Draw hand landmarks
+            # Draw hand landmarks with different colors for points and lines
             for hand_landmarks in results.multi_hand_landmarks:
+                from config import InferenceConfig
+                point_color = InferenceConfig.SKELETON_POINT_COLOR
+                line_color = InferenceConfig.SKELETON_LINE_COLOR
+                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
+                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
+                
                 mp_drawing.draw_landmarks(
                     frame,
                     hand_landmarks,
-                    mp_hands.HAND_CONNECTIONS
+                    mp_hands.HAND_CONNECTIONS,
+                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
+                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
                 )
                 
                 # Extract keypoints
@@ -576,7 +622,12 @@ def run_webcam_detection():
                     feedback_class = "feedback-warning"
                 elif len(st.session_state.keypoint_buffer) >= 15:
                     # Predict
-                    predicted_letter, confidence = predict_letter(st.session_state.keypoint_buffer, MODELS_DATA, ALPHABET)
+                    predicted_letter, confidence = predict_letter(
+                        st.session_state.keypoint_buffer, 
+                        MODELS_DATA, 
+                        ALPHABET,
+                        landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
+                    )
                     
                     if predicted_letter and confidence >= 0.7:
                         is_correct = predicted_letter == st.session_state.current_letter
@@ -668,22 +719,18 @@ def show_translation_mode():
         st.warning("⚠️ กรุณาใส่ Gemini API Key เพื่อใช้งานโหมดนี้")
         return
     
-    # Configure Gemini
+    # Configure Gemini with 2.5 Flash model
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         st.error(f"❌ ไม่สามารถเชื่อมต่อ Gemini API: {str(e)}")
         return
     
-    st.success("✅ เชื่อมต่อ Gemini API สำเร็จ!")
+    st.success("✅ เชื่อมต่อ Gemini API สำเร็จ! (Gemini 2.5 Flash)")
     
-    # Translation settings
-    col1, col2 = st.columns(2)
-    with col1:
-        auto_refine = st.checkbox("🔄 Auto-refine ทุกๆ 5 ตัวอักษร", value=True)
-    with col2:
-        clear_buffer = st.button("🗑️ ล้างข้อความ")
+    # Translation settings - removed auto-refine, only manual refine
+    clear_buffer = st.button("🗑️ ล้างข้อความ")
     
     if clear_buffer:
         st.session_state.translated_text = ""
@@ -762,8 +809,8 @@ def show_translation_mode():
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
         st.error("❌ ไม่สามารถเปิดกล้องได้")
@@ -795,13 +842,19 @@ def show_translation_mode():
         
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Draw hand landmarks
+                # Draw hand landmarks with different colors for points and lines
+                from config import InferenceConfig
+                point_color = InferenceConfig.SKELETON_POINT_COLOR
+                line_color = InferenceConfig.SKELETON_LINE_COLOR
+                point_radius = InferenceConfig.SKELETON_POINT_RADIUS
+                line_thickness = InferenceConfig.SKELETON_LINE_THICKNESS
+                
                 mp_drawing.draw_landmarks(
                     frame,
                     hand_landmarks,
                     mp_hands.HAND_CONNECTIONS,
-                    mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
-                    mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2)
+                    mp_drawing.DrawingSpec(color=point_color, thickness=2, circle_radius=point_radius),
+                    mp_drawing.DrawingSpec(color=line_color, thickness=line_thickness)
                 )
                 
                 # Extract keypoints
@@ -819,7 +872,12 @@ def show_translation_mode():
                 if in_roi and bbox['width'] >= 0.15 and bbox['height'] >= 0.15:
                     if len(st.session_state.translation_buffer) >= 15:
                         # Predict letter
-                        predicted_letter, confidence = predict_letter(st.session_state.translation_buffer, MODELS_DATA, ALPHABET)
+                        predicted_letter, confidence = predict_letter(
+                            st.session_state.translation_buffer, 
+                            MODELS_DATA, 
+                            ALPHABET,
+                            landmarks=hand_landmarks  # Pass landmarks for skeleton approaches
+                        )
                         
                         if predicted_letter and confidence >= 0.75:
                             # Confirmation logic
@@ -835,16 +893,7 @@ def show_translation_mode():
                                 feedback_message = f"✅ เพิ่ม: {predicted_letter}"
                                 feedback_class = "feedback-correct"
                                 
-                                # Auto-refine every 5 characters
-                                if auto_refine and len(st.session_state.translated_text) % 5 == 0:
-                                    try:
-                                        prompt = f"""Refine this text to make it meaningful. Keep it brief.
-                                        Original: {st.session_state.translated_text}
-                                        Refined:"""
-                                        response = model.generate_content(prompt)
-                                        st.session_state.refined_text = response.text.strip()
-                                    except:
-                                        pass
+                                # No auto-refine - user will refine manually when finished
                                 
                                 # Reset
                                 detection_count = 0
@@ -902,7 +951,7 @@ def show_test_mode():
             st.session_state.test_start_time = time.time()
             st.rerun()
     else:
-        # Show test interface
+        # Show test interface with real-time timer
         elapsed_time = int(time.time() - st.session_state.test_start_time)
         remaining_time = max(0, 900 - elapsed_time)  # 15 minutes
         
@@ -910,8 +959,10 @@ def show_test_mode():
         with col1:
             st.metric("ข้อที่", f"{len(st.session_state.test_answers) + 1}/26")
         with col2:
+            # Real-time elapsed timer
             st.metric("เวลาที่ใช้", f"{elapsed_time//60:02d}:{elapsed_time%60:02d}")
         with col3:
+            # Real-time remaining timer
             st.metric("เวลาคงเหลือ", f"{remaining_time//60:02d}:{remaining_time%60:02d}")
         
         if remaining_time == 0:

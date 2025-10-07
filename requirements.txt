@@ -15,8 +15,23 @@ pillow>=9.0.0
 # Machine Learning
 scikit-learn>=1.0.0
 
-# Deep Learning (for CNN models)
+# Deep Learning - TensorFlow/Keras (Required for default models)
 tensorflow>=2.10.0
+
+# Deep Learning - PyTorch (Optional - for PyTorch models)
+# Uncomment to use PyTorch models (.pt, .pth files)
+# torch>=2.0.0
+# torchvision>=0.15.0
+
+# Deep Learning - ONNX Runtime (Optional - for ONNX models)
+# Uncomment for optimized inference with ONNX models (.onnx files)
+# onnxruntime>=1.15.0
+# For GPU support: onnxruntime-gpu>=1.15.0
+
+# Model Conversion (Optional)
+# Uncomment if you need to convert between frameworks
+# tf2onnx>=1.15.0  # TensorFlow → ONNX
+# onnx2pytorch>=0.4.0  # ONNX → PyTorch
 
 # Environment variables management
 python-dotenv>=1.0.0
