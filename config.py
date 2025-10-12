@@ -1,7 +1,47 @@
 """
 Configuration file for ASL Fingerspelling Trainer
-Centralized settings for preprocessing, models, and detection approaches
+Centralized settings for preprocessing, models, detection approaches, and themes
 """
+
+# ==============================================================================
+# THEME CONFIGURATION
+# ==============================================================================
+
+THEMES = {
+    'light': {
+        'name': '☀️ โหมดสว่าง',
+        'primary': '#4A90E2',
+        'secondary': '#7CB342',
+        'background': '#FFFFFF',
+        'text': '#333333',
+        'card_bg': '#F5F5F5',
+        'success': '#50C878',
+        'warning': '#F39C12',
+        'error': '#E74C3C',
+    },
+    'dark': {
+        'name': '🌙 โหมดมืด',
+        'primary': '#64B5F6',
+        'secondary': '#81C784',
+        'background': '#1E1E1E',
+        'text': '#E0E0E0',
+        'card_bg': '#2D2D2D',
+        'success': '#66BB6A',
+        'warning': '#FFA726',
+        'error': '#EF5350',
+    },
+    'ocean': {
+        'name': '🌊 โหมดมหาสมุทร',
+        'primary': '#00ACC1',
+        'secondary': '#26A69A',
+        'background': '#E0F7FA',
+        'text': '#006064',
+        'card_bg': '#B2EBF2',
+        'success': '#00897B',
+        'warning': '#FFB300',
+        'error': '#D84315',
+    },
+}
 
 # ==============================================================================
 # PREPROCESSING CONFIGURATION

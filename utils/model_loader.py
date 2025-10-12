@@ -76,17 +76,11 @@ def load_pytorch_landmark_model(model_path, encoder_path, device='auto'):
         Predictor instance or None if failed
     """
     if not TORCH_AVAILABLE:
-        st.error("❌ PyTorch not installed")
-        st.info("📦 Install with: `pip install torch torchvision`")
-        st.code("pip install torch torchvision", language="bash")
+        st.error("❌ ไม่สามารถโหลดโมเดลได้ กรุณาติดต่อผู้ดูแลระบบ")
         return None
     
     if not PYTORCH_ASL_AVAILABLE:
-        st.error("❌ PyTorch ASL package import failed")
-        if 'PYTORCH_ASL_IMPORT_ERROR' in globals():
-            st.error(f"Import error: {PYTORCH_ASL_IMPORT_ERROR}")
-        st.info("📁 Check that pytorch_asl/ folder exists with all required files")
-        st.info("💡 Try: `pip install mediapipe scikit-learn`")
+        st.error("❌ ไม่สามารถโหลดโมเดลได้ กรุณาติดต่อผู้ดูแลระบบ")
         return None
     
     try:
@@ -100,9 +94,9 @@ def load_pytorch_landmark_model(model_path, encoder_path, device='auto'):
         return predictor
         
     except Exception as e:
-        st.error(f"❌ Failed to load PyTorch landmark model: {e}")
-        import traceback
-        st.code(traceback.format_exc(), language="python")
+        st.error("❌ ไม่สามารถโหลดโมเดลได้ กรุณาติดต่อผู้ดูแลระบบ")
+        import logging
+        logging.error(f"Failed to load PyTorch model: {e}")
         return None
 
 
@@ -174,19 +168,16 @@ def load_model(model_name=None):
             if model_path.endswith(('.h5', '.keras')):
                 # TensorFlow/Keras model
                 if not TF_AVAILABLE:
-                    st.warning(f"⚠️ TensorFlow not installed. Cannot load {model_basename}")
                     continue
                 
                 loaded_model = keras.models.load_model(model_path)
                 framework = 'tensorflow'
-                st.success(f"✅ โหลด TensorFlow Model ({model_basename}) สำเร็จ!")
                 loaded_path = model_path
                 break
                 
             elif model_path.endswith(('.pt', '.pth')):
                 # PyTorch model
                 if not TORCH_AVAILABLE:
-                    st.warning(f"⚠️ PyTorch not installed. Cannot load {model_basename}")
                     continue
                 
                 # Load PyTorch model
@@ -194,7 +185,6 @@ def load_model(model_name=None):
                 
                 # If it's a state dict, need to know the architecture
                 if isinstance(loaded_model, dict):
-                    st.warning(f"⚠️ {model_basename} is a state_dict. Need model architecture to load.")
                     continue
                 
                 # Set to eval mode
@@ -202,24 +192,22 @@ def load_model(model_name=None):
                     loaded_model.eval()
                 
                 framework = 'pytorch'
-                st.success(f"✅ โหลด PyTorch Model ({model_basename}) สำเร็จ!")
                 loaded_path = model_path
                 break
                 
             elif model_path.endswith('.onnx'):
                 # ONNX model
                 if not ONNX_AVAILABLE:
-                    st.warning(f"⚠️ ONNX Runtime not installed. Cannot load {model_basename}")
                     continue
                 
                 loaded_model = ort.InferenceSession(model_path)
                 framework = 'onnx'
-                st.success(f"✅ โหลด ONNX Model ({model_basename}) สำเร็จ!")
                 loaded_path = model_path
                 break
                 
         except Exception as e:
-            st.warning(f"⚠️ ไม่สามารถโหลด {model_basename}: {e}")
+            import logging
+            logging.warning(f"Failed to load {model_basename}: {e}")
     
     if loaded_model is None:
         # List available models
@@ -315,8 +303,6 @@ def load_models():
         model_type = config.ModelConfig.MODEL_TYPE.lower()
     
     if model_type == 'pytorch':
-        st.info("🔧 Loading PyTorch landmark-based model...")
-        
         # Load PyTorch landmark model using Predictor
         predictor = load_pytorch_landmark_model(
             ModelConfig.PYTORCH_MODEL_PATH,
@@ -325,10 +311,8 @@ def load_models():
         )
         
         if predictor is None:
-            st.error("❌ Failed to load PyTorch model")
+            st.error("❌ ไม่สามารถโหลดระบบได้")
             return None
-        
-        st.success(f"✅ PyTorch model loaded successfully ({len(predictor.label_encoder.classes_)} classes)")
         
         return {
             'model_type': 'pytorch_landmark',
@@ -339,16 +323,12 @@ def load_models():
         }
     
     elif model_type == 'tensorflow':
-        st.info("🔧 Loading TensorFlow CNN model...")
-        
         # Load TensorFlow CNN model using existing load_model()
         result = load_model(ModelConfig.TF_MODEL_PATH)
         
         if result is None:
-            st.error("❌ Failed to load TensorFlow model")
+            st.error("❌ ไม่สามารถโหลดระบบได้")
             return None
-        
-        st.success(f"✅ TensorFlow model loaded successfully")
         
         # Convert to legacy format for backward compatibility
         return {

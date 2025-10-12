@@ -218,8 +218,8 @@ def get_openpose_detector():
         # This is a placeholder
         raise NotImplementedError("OpenPose not yet implemented. Use MediaPipe instead.")
     except Exception as e:
-        print(f"OpenPose initialization failed: {e}")
-        print("Falling back to MediaPipe")
+        import logging
+        logging.warning(f"OpenPose initialization failed: {e}")
         return get_mediapipe_detector()
 
 
@@ -233,8 +233,8 @@ def get_yolopose_detector():
         # This is a placeholder
         raise NotImplementedError("YOLOPose not yet implemented. Use MediaPipe instead.")
     except Exception as e:
-        print(f"YOLOPose initialization failed: {e}")
-        print("Falling back to MediaPipe")
+        import logging
+        logging.warning(f"YOLOPose initialization failed: {e}")
         return get_mediapipe_detector()
 
 

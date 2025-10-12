@@ -11,6 +11,7 @@ from PIL import Image
 import time
 import os
 import glob
+import io
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -19,7 +20,8 @@ import config
 from config import (
     PreprocessConfig, HandDetectionConfig, InferenceConfig,
     ModelConfig, PracticeModeConfig, TestModeConfig, UIConfig,
-    get_preprocess_function, get_resize_dimensions, get_color_conversion
+    get_preprocess_function, get_resize_dimensions, get_color_conversion,
+    THEMES
 )
 
 # Import utility functions
@@ -27,6 +29,7 @@ from utils.model_loader import init_mediapipe, load_models
 from utils.prediction import predict_letter
 from utils.hand_processing import extract_keypoints, calculate_bbox
 from utils.letter_data import get_letter_instructions
+from utils.confirmation import ConfirmationManager
 
 # Load environment variables from .env file
 try:
@@ -41,7 +44,7 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    st.warning("⚠️ google-generativeai not installed. Translation mode will be limited.")
+
 
 # Page configuration
 st.set_page_config(
@@ -51,66 +54,215 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
-st.markdown("""
+def generate_theme_css(theme_name='light'):
+    """Generate dynamic CSS based on selected theme"""
+    theme = THEMES.get(theme_name, THEMES['light'])
+    
+    return f"""
     <style>
-    .main-header {
-        font-size: 3rem;
-        color: #4A90E2;
+    /* Theme Variables */
+    :root {{
+        --primary-color: {theme['primary']};
+        --secondary-color: {theme['secondary']};
+        --background-color: {theme['background']};
+        --text-color: {theme['text']};
+        --card-bg: {theme['card_bg']};
+        --success-color: {theme['success']};
+        --warning-color: {theme['warning']};
+        --error-color: {theme['error']};
+    }}
+    
+    /* Apply theme */
+    .stApp {{
+        background-color: var(--background-color);
+        color: var(--text-color);
+        transition: all 0.3s ease;
+    }}
+    
+    .main-header {{
+        font-size: 1.5rem;
+        color: var(--primary-color);
         text-align: center;
         margin-bottom: 1rem;
-    }
-    .subtitle {
+    }}
+    .subtitle {{
         text-align: center;
-        color: #7F8C8D;
+        color: var(--text-color);
+        opacity: 0.7;
         margin-bottom: 2rem;
-    }
-    .stat-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }}
+    .stat-card {{
+        background: var(--card-bg);
         padding: 20px;
         border-radius: 10px;
-        color: white;
+        color: var(--text-color);
         text-align: center;
-    }
-    .stat-value {
-        font-size: 2.5rem;
+        border: 2px solid var(--primary-color);
+        transition: all 0.3s ease;
+        animation: fadeInUp 0.5s ease;
+    }}
+    .stat-card:hover {{
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }}
+    .stat-value {{
+        font-size: 2rem;
         font-weight: bold;
-    }
-    .stat-label {
-        font-size: 1rem;
+        color: var(--primary-color);
+        animation: pulse 2s ease-in-out infinite;
+    }}
+    .stat-label {{
+        font-size: 0.9rem;
         opacity: 0.9;
-    }
-    .feedback-correct {
-        background-color: #50C878;
+    }}
+    .feedback-correct {{
+        background-color: var(--success-color);
         color: white;
         padding: 15px;
         border-radius: 10px;
-        font-size: 1.2rem;
+        font-size: 1rem;
         text-align: center;
-    }
-    .feedback-incorrect {
-        background-color: #E74C3C;
+        animation: slideInBounce 0.5s ease;
+    }}
+    .feedback-incorrect {{
+        background-color: var(--error-color);
         color: white;
         padding: 15px;
         border-radius: 10px;
-        font-size: 1.2rem;
+        font-size: 1rem;
         text-align: center;
-    }
-    .feedback-warning {
-        background-color: #F39C12;
+        animation: shake 0.5s ease;
+    }}
+    .feedback-warning {{
+        background-color: var(--warning-color);
         color: white;
         padding: 15px;
         border-radius: 10px;
-        font-size: 1.2rem;
+        font-size: 1rem;
         text-align: center;
-    }
+        animation: fadeIn 0.3s ease;
+    }}
+    
+    /* Enhanced Animations */
+    @keyframes slideIn {{
+        from {{
+            opacity: 0;
+            transform: translateY(-20px);
+        }}
+        to {{
+            opacity: 1;
+            transform: translateY(0);
+        }}
+    }}
+    
+    @keyframes slideInBounce {{
+        0% {{
+            opacity: 0;
+            transform: translateY(-50px) scale(0.8);
+        }}
+        50% {{
+            transform: translateY(10px) scale(1.05);
+        }}
+        100% {{
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }}
+    }}
+    
+    @keyframes shake {{
+        0%, 100% {{ transform: translateX(0); }}
+        25% {{ transform: translateX(-10px); }}
+        75% {{ transform: translateX(10px); }}
+    }}
+    
+    @keyframes fadeIn {{
+        from {{
+            opacity: 0;
+        }}
+        to {{
+            opacity: 1;
+        }}
+    }}
+    
+    @keyframes fadeInUp {{
+        from {{
+            opacity: 0;
+            transform: translateY(20px);
+        }}
+        to {{
+            opacity: 1;
+            transform: translateY(0);
+        }}
+    }}
+    
+    @keyframes pulse {{
+        0%, 100% {{
+            opacity: 1;
+        }}
+        50% {{
+            opacity: 0.8;
+        }}
+    }}
+    
+    @keyframes glow {{
+        0%, 100% {{
+            box-shadow: 0 0 5px var(--primary-color);
+        }}
+        50% {{
+            box-shadow: 0 0 20px var(--primary-color);
+        }}
+    }}
+    
+    /* Add smooth transitions to buttons */
+    .stButton > button {{
+        transition: all 0.3s ease;
+        animation: fadeInUp 0.4s ease;
+    }}
+    
+    .stButton > button:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }}
+    
+    .stButton > button:active {{
+        transform: translateY(0);
+    }}
+    
+    /* Animate checkboxes */
+    .stCheckbox {{
+        animation: fadeIn 0.3s ease;
+    }}
+    
+    /* Animate images */
+    img {{
+        animation: fadeIn 0.5s ease;
+        transition: transform 0.3s ease;
+    }}
+    
+    img:hover {{
+        transform: scale(1.02);
+    }}
+    </style>
+    """
+
+# Custom CSS - Apply selected theme
+st.markdown(generate_theme_css(st.session_state.get('selected_theme', 'light')), unsafe_allow_html=True)
+
+# Original CSS (remove old static CSS)
+st.markdown("""
+    <style>
+    /* Additional custom styles */
     </style>
 """, unsafe_allow_html=True)
+
 
 # Initialize MediaPipe
 mp_hands, mp_drawing, hands = init_mediapipe()
 
 # Initialize session state
+if 'selected_theme' not in st.session_state:
+    st.session_state.selected_theme = 'light'
+
 if 'stats' not in st.session_state:
     st.session_state.stats = {
         'attempts': 0,
@@ -136,8 +288,15 @@ if 'refined_text' not in st.session_state:
 if 'translation_buffer' not in st.session_state:
     st.session_state.translation_buffer = []
 
-# Alphabet and Numbers
-ALPHABET = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+# Initialize confirmation managers
+if 'practice_confirmation' not in st.session_state:
+    st.session_state.practice_confirmation = ConfirmationManager(required_duration=1.5)
+
+if 'translation_confirmation' not in st.session_state:
+    st.session_state.translation_confirmation = ConfirmationManager(required_duration=1.5)
+
+# Alphabet - Only A-Z letters (removed 0-9 for simplicity)
+ALPHABET = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
 # Load models on startup
 MODELS_DATA = load_models()
@@ -172,7 +331,9 @@ def predict_asl(frame, hand_landmarks, keypoint_buffer, alphabet):
                 confidence = 0.0
             return predicted_letter, confidence
         except Exception as e:
-            st.error(f"PyTorch prediction error: {e}")
+            # Log error silently in backend
+            import logging
+            logging.error(f"Prediction error: {e}")
             return None, 0.0
     
     elif model_type == 'cnn':
@@ -185,7 +346,9 @@ def predict_asl(frame, hand_landmarks, keypoint_buffer, alphabet):
         )
     
     else:
-        st.error(f"Unknown model type: {model_type}")
+        # Log error silently in backend
+        import logging
+        logging.error(f"Unknown model type: {model_type}")
         return None, 0.0
 
 
@@ -197,31 +360,46 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.header("⚙️ Settings")
+        st.header("⚙️ การตั้งค่า")
         
-        # Model Type Selector
-        st.markdown("### 🤖 Model Configuration")
+        st.markdown("---")
         
-        # Display current model info
-        if MODELS_DATA:
-            current_model = MODELS_DATA.get('model_type', 'Unknown')
-            framework = MODELS_DATA.get('framework', 'Unknown')
-            
-            if current_model == 'pytorch_landmark':
-                st.success(f"✅ PyTorch (Landmark-based)")
-                st.caption("Fast, uses hand landmarks")
-            elif current_model == 'cnn':
-                st.success(f"✅ TensorFlow (Image-based CNN)")
-                st.caption("Slower, uses image preprocessing")
-            
-            # Show classes
-            if 'label_encoder' in MODELS_DATA:
-                num_classes = len(MODELS_DATA['label_encoder'].classes_)
-                st.caption(f"📊 {num_classes} classes")
-        else:
-            st.error("❌ No model loaded")
+        # Theme Selector
+        st.markdown("### 🎨 ธีม")
         
-        st.caption(f"💡 To change model: Edit `MODEL_TYPE` in `config.py`")
+        theme_options = {theme_key: theme_data['name'] 
+                        for theme_key, theme_data in THEMES.items()}
+        
+        selected_theme = st.selectbox(
+            "เลือกธีมที่ต้องการ",
+            options=list(theme_options.keys()),
+            format_func=lambda x: theme_options[x],
+            index=list(theme_options.keys()).index(st.session_state.selected_theme),
+            key='theme_selector'
+        )
+        
+        # Update theme if changed
+        if selected_theme != st.session_state.selected_theme:
+            st.session_state.selected_theme = selected_theme
+            st.rerun()
+        
+        # Show color preview
+        theme_data = THEMES[st.session_state.selected_theme]
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"""
+            <div style="background-color: {theme_data['primary']}; 
+                        color: white; padding: 8px; border-radius: 5px; text-align: center; font-size: 0.8rem;">
+                สีหลัก
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div style="background-color: {theme_data['secondary']}; 
+                        color: white; padding: 8px; border-radius: 5px; text-align: center; font-size: 0.8rem;">
+                สีรอง
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
@@ -234,11 +412,23 @@ def main():
         st.markdown("---")
         
         if mode == "✋ Practice Mode":
-            st.session_state.current_letter = st.selectbox(
+            # Store previous letter to detect changes
+            prev_letter = st.session_state.current_letter
+            
+            selected_letter = st.selectbox(
                 "เลือกตัวอักษร",
                 ALPHABET,
-                index=ALPHABET.index(st.session_state.current_letter)
+                index=ALPHABET.index(st.session_state.current_letter),
+                key='letter_selector'
             )
+            
+            # Update and rerun if changed
+            if selected_letter != prev_letter:
+                st.session_state.current_letter = selected_letter
+                # Clear buffers when switching letters
+                st.session_state.keypoint_buffer = []
+                st.session_state.frame_buffer = []
+                st.rerun()
             
             if st.button("🔄 Reset Stats"):
                 st.session_state.stats = {
@@ -258,7 +448,7 @@ def main():
         """)
         
         st.markdown("---")
-        st.markdown("### 📖 About")
+        st.markdown("### 📖 เกี่ยวกับ")
         st.info("ASL Fingerspelling Trainer v1.0\n\nใช้ AI และ Computer Vision ในการตรวจจับและวิเคราะห์ท่ามือแบบ Real-time")
     
     # Main content based on mode
@@ -283,182 +473,177 @@ def show_learning_mode():
     if st.session_state.selected_learning_char:
         show_letter_detail(st.session_state.selected_learning_char)
     else:
-        # Show selection grid
-        st.info("ℹ️ เลือกตัวอักษรหรือตัวเลขเพื่อดูตัวอย่างท่ามือและคำแนะนำให้ดีกว่านี้")
+        # Show selection grid - Only letters A-Z
+        st.info("ℹ️ เลือกตัวอักษรเพื่อดูตัวอย่างท่ามือและคำแนะนำ")
         
-        # Tab for Letters and Numbers
-        tab1, tab2 = st.tabs(["🔤 ตัวอักษร A-Z", "🔢 ตัวเลข 0-9"])
+        # Create grid for alphabet only
+        st.markdown("### เลือกตัวอักษรที่ต้องการเรียนรู้")
+        cols_per_row = 7
+        letters = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        rows = [letters[i:i+cols_per_row] for i in range(0, len(letters), cols_per_row)]
         
-        with tab1:
-            # Create grid for alphabet
-            st.markdown("### ตัวอย่างให้ ดีกว่านี้ - เลือกตัวอักษรที่ต้องการเรียนรู้")
-            cols_per_row = 7
-            letters = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-            rows = [letters[i:i+cols_per_row] for i in range(0, len(letters), cols_per_row)]
-            
-            for row in rows:
-                cols = st.columns(cols_per_row)
-                for idx, letter in enumerate(row):
-                    with cols[idx]:
-                        if st.button(letter, key=f"learn_{letter}", use_container_width=True):
-                            st.session_state.selected_learning_char = letter
-                            st.rerun()
-        
-        with tab2:
-            # Create grid for numbers
-            st.markdown("### ตัวอย่างให้ ดีกว่านี้ - เลือกตัวเลขที่ต้องการเรียนรู้")
-            cols = st.columns(10)
-            numbers = list('0123456789')
-            for idx, number in enumerate(numbers):
+        for row in rows:
+            cols = st.columns(cols_per_row)
+            for idx, letter in enumerate(row):
                 with cols[idx]:
-                    if st.button(number, key=f"learn_{number}", use_container_width=True):
-                        st.session_state.selected_learning_char = number
+                    if st.button(letter, key=f"learn_{letter}", width='stretch'):
+                        st.session_state.selected_learning_char = letter
                         st.rerun()
 
 def show_letter_detail(letter):
-    """Show detailed information about a letter or number - FULLSCREEN"""
-    char_type = "ตัวเลข" if letter.isdigit() else "ตัวอักษร"
+    """Show detailed information about a letter - FULLSCREEN"""
+    
+    # Initialize image index in session state
+    if 'learning_image_index' not in st.session_state:
+        st.session_state.learning_image_index = 0
     
     # Back button at top
-    if st.button("← กลับไปเลือกตัวอักษร/ตัวเลข", key="back_to_selection"):
+    if st.button("← กลับไปเลือกตัวอักษร", key="back_to_selection"):
         st.session_state.selected_learning_char = None
+        st.session_state.learning_image_index = 0  # Reset index
         st.rerun()
     
-    st.markdown(f"# {char_type} {letter} - ตัวอย่างให้ ดีกว่านี้")
-    st.markdown("---")
+    # Compact header
+    st.markdown(f"## ตัวอักษร {letter} - ตัวอย่างท่ามือ")
     
-    # Fullscreen layout - no columns, stack vertically
-    # Large character display
-    st.markdown(f"<div style='font-size: 12rem; text-align: center; color: #4A90E2; font-weight: bold; margin: 30px 0;'>{letter}</div>", 
+    # Large character display at the top
+    st.markdown(f"<div style='font-size: 3.5rem; text-align: center; color: #4A90E2; font-weight: bold; margin: 10px 0 20px 0;'>{letter}</div>", 
                unsafe_allow_html=True)
     
-    # Instructions section
-    st.markdown("## 💡 วิธีทำท่า:")
-    instructions = get_letter_instructions(letter)
-    st.info(instructions)
+    # Two column layout: Image on left, Instructions on right
+    col_img, col_info = st.columns([3, 2])
     
-    st.markdown("---")
-    
-    # Load images from dataset - display fullwidth
-    dataset_path = f"datasets/asl_dataset/{letter.lower()}"
-    if os.path.exists(dataset_path):
-        images = glob.glob(f"{dataset_path}/*.jpeg")[:9]  # Get first 9 images
-        
-        if images:
-            st.markdown("## 📸 ตัวอย่างท่ามือให้ ดีกว่านี้:")
-            # Display images in 3 rows of 3 - larger size
-            for i in range(0, len(images), 3):
-                img_cols = st.columns(3)
-                for j, img_path in enumerate(images[i:i+3]):
-                    with img_cols[j]:
-                        try:
-                            img = Image.open(img_path)
-                            st.image(img, use_container_width=True, caption=f"ตัวอย่าง {i+j+1}")
-                        except:
-                            st.error("❌")
+    with col_img:
+        # Load images from dataset
+        dataset_path = f"datasets/asl_dataset/{letter.lower()}"
+        if os.path.exists(dataset_path):
+            images = glob.glob(f"{dataset_path}/*.jpeg")
+            
+            if images:
+                # Ensure index is within bounds
+                if st.session_state.learning_image_index >= len(images):
+                    st.session_state.learning_image_index = 0
+                
+                # Display current image - smaller for better fit
+                current_image_path = images[st.session_state.learning_image_index]
+                try:
+                    img = Image.open(current_image_path)
+                    # Resize to smaller size
+                    img.thumbnail((400, 400))
+                    st.image(img, width=400)
+                except:
+                    st.error("❌ ไม่สามารถโหลดรูปภาพได้")
+                
+                # Navigation buttons - compact
+                nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
+                
+                with nav_col1:
+                    if st.button("⬅️", width='stretch',
+                                disabled=(st.session_state.learning_image_index == 0),
+                                help="ภาพก่อนหน้า"):
+                        st.session_state.learning_image_index -= 1
+                        st.rerun()
+                
+                with nav_col2:
+                    st.markdown(f"<div style='text-align: center; padding: 5px;'><b>{st.session_state.learning_image_index + 1}/{len(images)}</b></div>", 
+                               unsafe_allow_html=True)
+                
+                with nav_col3:
+                    if st.button("➡️", width='stretch',
+                                disabled=(st.session_state.learning_image_index == len(images) - 1),
+                                help="ภาพถัดไป"):
+                        st.session_state.learning_image_index += 1
+                        st.rerun()
+            else:
+                st.warning(f"⚠️ ไม่พบรูปภาพ")
         else:
-            st.warning(f"⚠️ ไม่พบรูปภาพสำหรับ{char_type} {letter}")
-    else:
-        st.warning(f"⚠️ ไม่พบโฟลเดอร์: {dataset_path}")
+            st.warning(f"⚠️ ไม่พบโฟลเดอร์")
     
-    st.markdown("---")
-    
-    # Tips section
-    st.markdown("## 🎯 คำแนะนำ:")
-    st.markdown("""
-    - 👀 **ดูตัวอย่างภาพทั้งหมดให้ครบ** - สังเกตละเอียดทุกมุมมอง
-    - ✋ **สังเกตตำแหน่งนิ้วและมือ** - ความถูกต้องของแต่ละนิ้ว
-    - 🔁 **ลองทำท่าตามภาพ** - ฝึกหัดต่อกล้องจนชำนาญ
-    - 🎯 **ฝึกจนชำนาญก่อนทดสอบ** - ความเชี่ยวชาญเป็นกุญแจ
-    """)
-    
-    st.markdown("---")
-    
-    # Action buttons - only back button
-    if st.button("← กลับไปเลือก", use_container_width=True, key="back_from_detail"):
-        st.session_state.selected_learning_char = None
-        st.rerun()
+    with col_info:
+        # Instructions
+        st.markdown("### 💡 วิธีทำท่า")
+        instructions = get_letter_instructions(letter)
+        st.info(instructions)
+        
+        # Tips
+        st.markdown("### 🎯 คำแนะนำ")
+        st.success("""
+        - วางมือให้อยู่ตรงกลางกรอบภาพ
+        - ทำท่าช้าๆ และชัดเจน
+        - ศึกษาจากตัวอย่างภาพหลายๆ มุม
+        - ฝึกฝนซ้ำๆ จนชำนาญ
+        """)
 
 def show_practice_mode():
     """Practice Mode - Real-time practice with feedback"""
-    char_type = "ตัวเลข" if st.session_state.current_letter.isdigit() else "ตัวอักษร"
-    st.header(f"✋ โหมดฝึกฝน - {char_type} {st.session_state.current_letter}")
+    st.header(f"✋ โหมดฝึกฝน - ตัวอักษร {st.session_state.current_letter}")
     
     # Initialize practice start time if not exists
     if 'practice_start_time' not in st.session_state:
         st.session_state.practice_start_time = time.time()
     
-    # Calculate elapsed time
-    elapsed_seconds = int(time.time() - st.session_state.practice_start_time)
-    elapsed_minutes = elapsed_seconds // 60
-    elapsed_secs = elapsed_seconds % 60
+    # Create placeholders for real-time stats updates
+    stats_placeholder = st.empty()
     
-    # Display stats with timer (full width)
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        attempts = st.session_state.stats.get('attempts', 0)
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{attempts}</div>
-            <div class="stat-label">ครั้งที่ลอง</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        correct = st.session_state.stats.get('correct', 0)
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{correct}</div>
-            <div class="stat-label">ถูกต้อง</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
+    # Function to update stats display
+    def update_stats_display():
+        elapsed_seconds = int(time.time() - st.session_state.practice_start_time)
+        elapsed_minutes = elapsed_seconds // 60
+        elapsed_secs = elapsed_seconds % 60
+        
         attempts = st.session_state.stats.get('attempts', 0)
         correct = st.session_state.stats.get('correct', 0)
         success_rate = (correct / attempts * 100) if attempts > 0 else 0
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{success_rate:.1f}%</div>
-            <div class="stat-label">อัตราความสำเร็จ</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        # Real-time timer placeholder
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{elapsed_minutes:02d}:{elapsed_secs:02d}</div>
-            <div class="stat-label">เวลาที่ใช้</div>
+        
+        stats_placeholder.markdown(f"""
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <div class="stat-card" style="flex: 1;">
+                <div class="stat-value">{attempts}</div>
+                <div class="stat-label">ครั้งที่ลอง</div>
+            </div>
+            <div class="stat-card" style="flex: 1;">
+                <div class="stat-value">{correct}</div>
+                <div class="stat-label">ถูกต้อง</div>
+            </div>
+            <div class="stat-card" style="flex: 1;">
+                <div class="stat-value">{success_rate:.1f}%</div>
+                <div class="stat-label">อัตราความสำเร็จ</div>
+            </div>
+            <div class="stat-card" style="flex: 1;">
+                <div class="stat-value">{elapsed_minutes:02d}:{elapsed_secs:02d}</div>
+                <div class="stat-label">เวลาที่ใช้</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
-    st.markdown("---")
+    # Initial display
+    update_stats_display()
     
-    # Create two columns: Reference images and Instructions
-    col_ref, col_inst = st.columns(2)
+    # Two-column layout: Example Image on left | Instructions + Camera on right
+    col_ref, col_inst = st.columns([1, 1])
     
     with col_ref:
-        st.markdown("### 📸 ตัวอย่างท่ามือ")
+        st.markdown("### 📸 ตัวอย่าง")
         
-        # Load reference images from dataset
+        # Load reference images from dataset - show only 1 image
         letter = st.session_state.current_letter
         dataset_path = f"datasets/asl_dataset/{letter.lower()}"
         
         if os.path.exists(dataset_path):
-            images = glob.glob(f"{dataset_path}/*.jpeg")[:4]  # Show 4 reference images
+            images = glob.glob(f"{dataset_path}/*.jpeg")
             
             if images:
-                for i in range(0, len(images), 2):
-                    img_cols = st.columns(2)
-                    for j, img_path in enumerate(images[i:i+2]):
-                        with img_cols[j]:
-                            try:
-                                img = Image.open(img_path)
-                                st.image(img, use_container_width=True)
-                            except:
-                                pass
+                # Show only 1 image to save space - use caching to prevent MediaFileStorageError
+                try:
+                    # Read image as bytes and display directly to avoid caching issues
+                    with open(images[0], 'rb') as img_file:
+                        img_bytes = img_file.read()
+                    img = Image.open(io.BytesIO(img_bytes))
+                    # Resize to smaller size to fit better
+                    img.thumbnail((300, 300))
+                    st.image(img, width=300)
+                except Exception as e:
+                    st.warning("ไม่สามารถโหลดรูปได้")
             else:
                 st.info("ไม่พบรูปตัวอย่าง")
         else:
@@ -470,26 +655,14 @@ def show_practice_mode():
         instructions = get_letter_instructions(letter)
         st.info(instructions)
         
-        # Next letter button
-        if st.button("⏭️ ตัวอักษรถัดไป", key="next_letter_btn", use_container_width=True):
-            current_idx = ALPHABET.index(st.session_state.current_letter)
-            next_idx = (current_idx + 1) % len(ALPHABET)
-            st.session_state.current_letter = ALPHABET[next_idx]
-            # Clear buffers when switching
-            st.session_state.keypoint_buffer = []
-            st.session_state.frame_buffer = []
-            st.rerun()
-    
-    st.markdown("---")
-    
-    # Camera section - FULL WIDTH like translation mode
-    st.markdown("### 📹 กล้อง")
-    run_camera = st.checkbox("เปิดกล้อง", value=False)
-    
-    if run_camera:
-        run_webcam_detection()
+        # Camera section - below instructions in same column
+        st.markdown("### 📹 กล้อง")
+        run_camera = st.checkbox("เปิดกล้อง", value=True, key="practice_camera_checkbox")
+        
+        if run_camera:
+            run_webcam_detection(update_stats_display, camera_width=640)
 
-def run_test_detection(target_letter):
+def run_test_detection(target_letter, update_timer_callback=None):
     """Run camera detection for test mode with auto-skip"""
     hands, mp_drawing, mp_hands = init_mediapipe()
     
@@ -497,7 +670,7 @@ def run_test_detection(target_letter):
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Full resolution for test mode
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
@@ -511,6 +684,16 @@ def run_test_detection(target_letter):
     required_frames = 30  # Need 30 consecutive frames for confirmation
     
     while not stop_button:
+        # Update timer in real-time if callback provided
+        if update_timer_callback:
+            elapsed_time, remaining_time = update_timer_callback()
+            
+            # Check if time is up
+            if remaining_time == 0:
+                cap.release()
+                st.rerun()
+                return
+        
         ret, frame = cap.read()
         if not ret:
             break
@@ -589,9 +772,9 @@ def run_test_detection(target_letter):
             cv2.putText(frame, "Hand Detected", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
-        # Display
+        # Display - larger size
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB", use_container_width=True)
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
         
         # Show feedback
         if feedback_message:
@@ -604,16 +787,19 @@ def run_test_detection(target_letter):
     
     cap.release()
 
-def run_webcam_detection():
+def run_webcam_detection(update_stats_callback=None, camera_width=1280):
     """Run webcam with hand detection"""
     hands, mp_drawing, mp_hands = init_mediapipe()
     
     FRAME_WINDOW = st.image([])
     feedback_placeholder = st.empty()
     
+    # Set camera resolution based on width parameter
+    camera_height = int(camera_width * 9 / 16)  # Maintain 16:9 aspect ratio
+    
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
     
     if not cap.isOpened():
         st.error("❌ ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตใช้งานกล้อง")
@@ -622,6 +808,10 @@ def run_webcam_detection():
     stop_button = st.button("⏹️ หยุดกล้อง")
     
     while not stop_button:
+        # Update stats in real-time if callback provided
+        if update_stats_callback:
+            update_stats_callback()
+        
         ret, frame = cap.read()
         if not ret:
             st.error("❌ ไม่สามารถอ่านข้อมูลจากกล้องได้")
@@ -665,6 +855,7 @@ def run_webcam_detection():
                 if hand_size < 0.2:
                     feedback_message = "🔍 มือเล็กไป กรุณาเข้าใกล้กล้อง"
                     feedback_class = "feedback-warning"
+                    st.session_state.practice_confirmation.reset()
                 elif len(st.session_state.keypoint_buffer) >= 15:
                     # Predict
                     predicted_letter, confidence = predict_asl(
@@ -674,10 +865,16 @@ def run_webcam_detection():
                         ALPHABET
                     )
                     
-                    if predicted_letter and confidence is not None and confidence >= 0.7:
+                    if predicted_letter and confidence is not None:
                         is_correct = predicted_letter == st.session_state.current_letter
                         
-                        if is_correct:
+                        # Add to confirmation manager
+                        is_confirmed, progress, elapsed = st.session_state.practice_confirmation.add_detection(
+                            predicted_letter, confidence
+                        )
+                        
+                        if is_confirmed and is_correct:
+                            # Confirmed correct answer
                             feedback_message = f"✅ ถูกต้อง! {predicted_letter} ({confidence*100:.0f}%)"
                             feedback_class = "feedback-correct"
                             
@@ -686,30 +883,55 @@ def run_webcam_detection():
                             st.session_state.stats['correct'] += 1
                             st.session_state.stats['total_accuracy'] += confidence * 100
                             
-                            # Clear buffer
+                            # Clear buffer and reset confirmation
                             st.session_state.keypoint_buffer = []
-                            time.sleep(1)
-                        else:
-                            feedback_message = f"🔄 ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - เป้าหมาย: {st.session_state.current_letter}"
+                            st.session_state.practice_confirmation.reset()
+                            time.sleep(0.5)
+                        elif is_confirmed and not is_correct:
+                            # Confirmed wrong answer
+                            feedback_message = f"❌ ผิด: {predicted_letter} - เป้าหมาย: {st.session_state.current_letter}"
                             feedback_class = "feedback-incorrect"
+                            
+                            # Update stats (count mistake)
+                            st.session_state.stats['attempts'] += 1
+                            st.session_state.stats['total_accuracy'] += 0  # Add 0 for incorrect
+                            
+                            # Reset
+                            st.session_state.keypoint_buffer = []
+                            st.session_state.practice_confirmation.reset()
+                            time.sleep(0.5)
+                        elif progress > 0:
+                            # Detecting, show progress
+                            if is_correct:
+                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress:.0f}% - {elapsed:.1f}s)"
+                                feedback_class = "feedback-correct"
+                            else:
+                                feedback_message = f"⚠️ ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - ต้องการ: {st.session_state.current_letter}"
+                                feedback_class = "feedback-warning"
+                        else:
+                            feedback_message = "⏳ กำลังตรวจจับ..."
+                            feedback_class = "feedback-warning"
                     else:
                         feedback_message = "⏳ กำลังตรวจจับ..."
                         feedback_class = "feedback-warning"
+                        st.session_state.practice_confirmation.reset()
                 else:
                     feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
                     feedback_class = "feedback-warning"
+                    st.session_state.practice_confirmation.reset()
         else:
             feedback_message = "✋ ไม่พบมือ กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
+            st.session_state.practice_confirmation.reset()
         
         # Add skeleton detection indicator
         if skeleton_detected:
             cv2.putText(frame, "Hand Detected", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
-        # Display frame
+        # Display frame with dynamic width based on parameter
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB", use_container_width=True)
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=camera_width)
         
         # Display feedback
         if feedback_message:
@@ -722,58 +944,46 @@ def run_webcam_detection():
 
 def show_translation_mode():
     """Real-time Translation Mode - Translate ASL to text and refine with Gemini API"""
-    st.header("🌐 โหมดแปลภาษาแบบ Real-time")
+    st.header("🌐 โหมดแปลภาษา Real-time")
     
     # Check Gemini API availability
     if not GEMINI_AVAILABLE:
-        st.error("❌ ไม่สามารถใช้งานได้ กรุณาติดตั้ง: pip install google-generativeai")
+        st.error("❌ โหมดนี้ต้องการการติดตั้งเพิ่มเติม กรุณาติดต่อผู้ดูแลระบบ")
         return
     
-    # API Key configuration - Load from .env or user input
-    api_key = os.getenv("GEMINI_API_KEY")  # Try to load from .env first
+    # API Key configuration - compact
+    api_key = os.getenv("GEMINI_API_KEY")
     
     if not api_key:
-        # Show instructions if no API key in .env
-        st.info("""
-        ### 🔑 ต้องการ Gemini API Key
-        
-        **วิธีที่ 1: ใช้ไฟล์ .env (แนะนำ - ปลอดภัยกว่า)**
-        1. สร้างไฟล์ `.env` ในโฟลเดอร์โปรเจกต์
-        2. เพิ่มบรรทัด: `GEMINI_API_KEY=your_api_key_here`
-        3. Restart แอปพลิเคชัน
-        
-        **วิธีที่ 2: ใส่โดยตรง (ชั่วคราว)**
-        1. ไปที่ [Google AI Studio](https://makersuite.google.com/app/apikey)
-        2. สร้าง API Key
-        3. ใส่ในช่องด้านล่าง
-        """)
-        
-        api_key = st.text_input(
-            "Gemini API Key", 
-            type="password", 
-            help="ใส่ API Key จาก Google AI Studio (หรือใช้ .env file)",
-            placeholder="กรุณาใส่ API Key หรือตั้งค่าใน .env file"
-        )
-    else:
-        # API key loaded from .env
-        st.success("✅ โหลด API Key จากไฟล์ .env สำเร็จ!")
-    
+        st.info("🔑 กรุณาใส่ API Key ด้านล่าง")
+        api_key = st.text_input("API Key", type="password", placeholder="กรุณาใส่ API Key")
+
     if not api_key:
-        st.warning("⚠️ กรุณาใส่ Gemini API Key เพื่อใช้งานโหมดนี้")
+        st.warning("⚠️ กรุณาใส่ API Key เพื่อใช้งานโหมดนี้")
         return
     
-    # Configure Gemini with 2.5 Flash model
+    # Configure Gemini
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
-        st.error(f"❌ ไม่สามารถเชื่อมต่อ Gemini API: {str(e)}")
+        st.error(f"❌ ไม่สามารถเชื่อมต่อได้ กรุณาตรวจสอบ API Key")
         return
     
-    st.success("✅ เชื่อมต่อ Gemini API สำเร็จ! (Gemini 2.5 Flash)")
+    # Compact controls in one row
+    ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1, 1, 1, 2])
     
-    # Translation settings - removed auto-refine, only manual refine
-    clear_buffer = st.button("🗑️ ล้างข้อความ")
+    with ctrl_col1:
+        clear_buffer = st.button("🗑️ ล้าง", width='stretch')
+    
+    with ctrl_col2:
+        st.metric("ตัวอักษร", len(st.session_state.translated_text))
+    
+    with ctrl_col3:
+        st.metric("คำ", len(st.session_state.translated_text.split()))
+    
+    with ctrl_col4:
+        refine_button = st.button("✨ ปรับปรุงข้อความ", type="primary", width='stretch')
     
     if clear_buffer:
         st.session_state.translated_text = ""
@@ -781,48 +991,51 @@ def show_translation_mode():
         st.session_state.translation_buffer = []
         st.rerun()
     
-    # Display areas
-    st.markdown("### 📝 ข้อความที่แปลได้")
-    translated_display = st.empty()
+    # Compact display areas - side by side
+    col_text, col_refined = st.columns(2)
     
-    # Show word formation
-    st.markdown("### 💬 คำที่สร้าง")
-    if st.session_state.translated_text:
-        words = st.session_state.translated_text.split()
-        if words:
-            st.markdown(" · ".join(words))
+    with col_text:
+        st.markdown("### 📝 ข้อความ")
+        translated_display = st.empty()
+    
+    with col_refined:
+        st.markdown("### ✨ ปรับปรุงแล้ว")
+        refined_display = st.empty()
+    
+    # Word display placeholder
+    word_display = st.empty()
+    
+    # Function to update displays in real-time
+    def update_translation_displays():
+        # Update translated text
+        if st.session_state.translated_text:
+            translated_display.markdown(f"""
+            <div style='background-color: #E8F4F8; padding: 10px; border-radius: 8px;'>
+                {st.session_state.translated_text}
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Update word display - compact
+        if st.session_state.translated_text:
+            words = st.session_state.translated_text.split()
+            if words:
+                word_display.info(f"💬 คำล่าสุด: **{words[-1]}**")
+            else:
+                word_display.info("💬 เริ่มทำท่ามือเพื่อสร้างคำ")
         else:
-            st.info("เริ่มทำท่ามือเพื่อสร้างคำ...")
-    else:
-        st.info("เริ่มทำท่ามือเพื่อสร้างคำ...")
+            word_display.info("💬 เริ่มทำท่ามือเพื่อสร้างคำ")
     
-    st.markdown("### ✨ ข้อความที่ปรับปรุงแล้ว (Gemini)")
-    refined_display = st.empty()
+    # Initial display
+    update_translation_displays()
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("ตัวอักษร", len(st.session_state.translated_text))
-    with col2:
-        st.metric("คำ", len(st.session_state.translated_text.split()))
-    with col3:
-        refine_button = st.button("✨ Refine ด้วย Gemini", type="primary")
-    
-    # Display current text
-    if st.session_state.translated_text:
-        translated_display.markdown(f"""
-        <div style='background-color: #E8F4F8; padding: 20px; border-radius: 10px; font-size: 1.2rem;'>
-            {st.session_state.translated_text}
-        </div>
-        """, unsafe_allow_html=True)
-    
+    # Manual refine button - handle refined text display
     if st.session_state.refined_text:
         refined_display.markdown(f"""
-        <div style='background-color: #E8F8E8; padding: 20px; border-radius: 10px; font-size: 1.2rem;'>
+        <div style='background-color: #E8F8E8; padding: 10px; border-radius: 8px;'>
             {st.session_state.refined_text}
         </div>
         """, unsafe_allow_html=True)
     
-    # Manual refine button
     if refine_button and st.session_state.translated_text:
         with st.spinner("🔄 กำลังปรับปรุงข้อความด้วย Gemini..."):
             try:
@@ -840,19 +1053,20 @@ def show_translation_mode():
                 st.session_state.refined_text = response.text.strip()
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+                st.error("❌ ไม่สามารถปรับปรุงข้อความได้ กรุณาลองใหม่อีกครั้ง")
     
-    st.markdown("---")
+    # Camera section - compact
     st.markdown("### 📹 กล้อง")
     
     # Initialize MediaPipe
     hands, mp_drawing, mp_hands = init_mediapipe()
     
     FRAME_WINDOW = st.image([])
+    
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Increased resolution
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     
     if not cap.isOpened():
@@ -860,9 +1074,6 @@ def show_translation_mode():
         return
     
     stop_button = st.button("⏹️ หยุดกล้อง")
-    last_detected_letter = None
-    detection_count = 0
-    CONFIRMATION_THRESHOLD = 5  # ต้องตรวจจับตัวอักษรเดียวกัน 5 ครั้งติดต่อกัน
     
     while not stop_button:
         ret, frame = cap.read()
@@ -909,51 +1120,56 @@ def show_translation_mode():
                             ALPHABET
                         )
                         
-                        if predicted_letter and confidence is not None and confidence >= 0.75:
-                            # Confirmation logic
-                            if predicted_letter == last_detected_letter:
-                                detection_count += 1
-                            else:
-                                last_detected_letter = predicted_letter
-                                detection_count = 1
+                        if predicted_letter and confidence is not None:
+                            # Use ConfirmationManager for time-based confirmation
+                            is_confirmed, progress, elapsed = st.session_state.translation_confirmation.add_detection(
+                                predicted_letter, confidence
+                            )
                             
-                            # Add letter when confirmed
-                            if detection_count >= CONFIRMATION_THRESHOLD:
+                            if is_confirmed:
+                                # Add confirmed letter
                                 st.session_state.translated_text += predicted_letter
                                 feedback_message = f"✅ เพิ่ม: {predicted_letter}"
                                 feedback_class = "feedback-correct"
                                 
-                                # No auto-refine - user will refine manually when finished
+                                # Update displays in real-time
+                                update_translation_displays()
                                 
                                 # Reset
-                                detection_count = 0
-                                last_detected_letter = None
+                                st.session_state.translation_confirmation.reset()
                                 st.session_state.translation_buffer = []
                                 time.sleep(0.5)
+                            elif progress > 0:
+                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress:.0f}% - {elapsed:.1f}s)"
+                                feedback_class = "feedback-warning"
                             else:
-                                feedback_message = f"🔄 ตรวจจับ: {predicted_letter} ({detection_count}/{CONFIRMATION_THRESHOLD})"
+                                feedback_message = "⏳ กำลังตรวจจับ..."
                                 feedback_class = "feedback-warning"
                         else:
                             feedback_message = "⏳ กำลังวิเคราะห์..."
                             feedback_class = "feedback-warning"
+                            st.session_state.translation_confirmation.reset()
                     else:
                         feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
                         feedback_class = "feedback-warning"
+                        st.session_state.translation_confirmation.reset()
                 else:
                     feedback_message = "⚠️ วางมือให้อยู่ในกรอบและให้มีขนาดที่เหมาะสม"
                     feedback_class = "feedback-warning"
+                    st.session_state.translation_confirmation.reset()
         else:
             feedback_message = "👋 กรุณาแสดงมือต่อกล้อง"
             feedback_class = "feedback-warning"
+            st.session_state.translation_confirmation.reset()
         
         # Add skeleton detection indicator
         if skeleton_detected:
             cv2.putText(frame, "Hand Detected", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
-        # Display frame
+        # Display frame - larger size
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB")
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
         
         # Display feedback
         if feedback_message:
@@ -980,59 +1196,72 @@ def show_test_mode():
         st.session_state.test_started = False
     
     if not st.session_state.test_started:
-        if st.button("🚀 เริ่มทำแบบทดสอบ", type="primary", use_container_width=True):
+        if st.button("🚀 เริ่มทำแบบทดสอบ", type="primary", width='stretch'):
             st.session_state.test_started = True
             st.session_state.test_answers = []
             st.session_state.test_start_time = time.time()
             st.rerun()
     else:
-        # Show test interface with real-time timer
-        elapsed_time = int(time.time() - st.session_state.test_start_time)
-        remaining_time = max(0, 900 - elapsed_time)  # 15 minutes
+        # Create placeholders for real-time updates
+        timer_placeholder = st.empty()
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("ข้อที่", f"{len(st.session_state.test_answers) + 1}/26")
-        with col2:
-            # Real-time elapsed timer
-            st.metric("เวลาที่ใช้", f"{elapsed_time//60:02d}:{elapsed_time%60:02d}")
-        with col3:
-            # Real-time remaining timer
-            st.metric("เวลาคงเหลือ", f"{remaining_time//60:02d}:{remaining_time%60:02d}")
+        # Function to update timer display
+        def update_timer_display():
+            elapsed_time = int(time.time() - st.session_state.test_start_time)
+            remaining_time = max(0, 900 - elapsed_time)  # 15 minutes
+            
+            col1, col2, col3 = timer_placeholder.columns(3)
+            with col1:
+                st.metric("ข้อที่", f"{len(st.session_state.test_answers) + 1}/26")
+            with col2:
+                # Real-time elapsed timer
+                st.metric("เวลาที่ใช้", f"{elapsed_time//60:02d}:{elapsed_time%60:02d}")
+            with col3:
+                # Real-time remaining timer
+                st.metric("เวลาคงเหลือ", f"{remaining_time//60:02d}:{remaining_time%60:02d}")
+            
+            return elapsed_time, remaining_time
+        
+        # Initial display
+        elapsed_time, remaining_time = update_timer_display()
         
         if remaining_time == 0:
             show_test_results()
+        elif len(st.session_state.test_answers) >= len(ALPHABET):
+            # All questions completed
+            show_test_results()
         else:
-            # Show current question
+            # Show current question - compact layout
             current_letter = ALPHABET[len(st.session_state.test_answers)]
-            char_type = "ตัวเลข" if current_letter.isdigit() else "ตัวอักษร"
             
+            # Compact two-column: Character + Instructions | Camera
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.markdown(f"### ทำท่ามือ{char_type}:")
-                st.markdown(f"<div style='font-size: 10rem; text-align: center; color: #4A90E2; font-weight: bold; padding: 50px 0;'>{current_letter}</div>", 
+                st.markdown(f"### ทำท่าตัวอักษร:")
+                # Smaller character display
+                st.markdown(f"<div style='font-size: 3rem; text-align: center; color: #4A90E2; font-weight: bold; padding: 20px 0;'>{current_letter}</div>", 
                            unsafe_allow_html=True)
                 
-                # Show instructions only
-                st.markdown("#### 💡 วิธีทำท่า:")
+                # Compact instructions
+                st.markdown("#### 💡 วิธีทำ")
                 instructions = get_letter_instructions(current_letter)
                 st.info(instructions)
             
             with col2:
                 st.markdown("### 📷 เปิดกล้องเพื่อจับท่ามือ")
-                run_test_camera = st.checkbox("เปิดกล้อง", value=False, key="test_camera")
+                run_test_camera = st.checkbox("เปิดกล้อง", value=True, key="test_camera")
                 
                 if run_test_camera:
-                    st.info(f"📌 ทำท่ามือ{char_type} {current_letter} และกดยืนยันเมื่อพร้อม")
-                    run_test_detection(current_letter)
+                    st.info(f"📌 ทำท่ามือตัวอักษร {current_letter} และกดยืนยันเมื่อพร้อม")
+                    run_test_detection(current_letter, update_timer_display)
                 else:
                     st.warning("⚠️ เปิดกล้องเพื่อเริ่มทำแบบทดสอบ")
                 
                 st.info("📹 เปิดกล้องและทำท่ามือ - ระบบจะข้ามข้อถัดไปอัตโนมัติเมื่อตรวจจับถูกต้อง")
                 
                 # Manual skip (if needed)
-                if st.button("⏭️ ข้ามข้อนี้ (ไม่ทำหรือไม่เปิดกล้อง)", use_container_width=True):
+                if st.button("⏭️ ข้ามข้อนี้ (ไม่ทำหรือไม่เปิดกล้อง)", width='stretch'):
                     # Mark as incorrect if skipped
                     st.session_state.test_answers.append({
                         'question': current_letter,
@@ -1040,8 +1269,8 @@ def show_test_mode():
                         'correct': False
                     })
                     
-                    total_questions = len([c for c in ALPHABET if c.isalpha()]) + len([c for c in ALPHABET if c.isdigit()])
-                    if len(st.session_state.test_answers) >= total_questions:
+                    # Total questions is now just 26 letters (A-Z)
+                    if len(st.session_state.test_answers) >= len(ALPHABET):
                         show_test_results()
                     else:
                         st.rerun()
@@ -1060,9 +1289,9 @@ def show_test_results():
     with col1:
         st.markdown(f"""
         <div style='text-align: center; padding: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;'>
-            <div style='font-size: 5rem; font-weight: bold;'>{correct_count}</div>
-            <div style='font-size: 2rem;'>/ {total}</div>
-            <div style='font-size: 1.2rem; margin-top: 10px;'>คะแนนรวม</div>
+            <div style='font-size: 2.5rem; font-weight: bold;'>{correct_count}</div>
+            <div style='font-size: 1.2rem;'>/ {total}</div>
+            <div style='font-size: 1rem; margin-top: 10px;'>คะแนนรวม</div>
         </div>
         """, unsafe_allow_html=True)
     

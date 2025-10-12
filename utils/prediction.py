@@ -62,5 +62,7 @@ def predict_letter(keypoints_sequence, models_data, alphabet, landmarks=None):
         return predicted_letter, confidence
             
     except Exception as e:
-        st.error(f"Prediction error: {e}")
+        # Log error silently in backend
+        import logging
+        logging.error(f"Prediction error: {e}")
         return None, 0.0
