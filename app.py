@@ -124,6 +124,34 @@ def generate_theme_css(theme_name='light'):
         text-align: center;
         animation: slideInBounce 0.5s ease;
     }}
+    .feedback-confirming {{
+        background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 1rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 0 20px rgba(46, 125, 50, 0.5);
+    }}
+    
+    .feedback-confirming::before {{
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+        transition: width 0.1s ease-out;
+        z-index: 0;
+        box-shadow: 2px 0 10px rgba(76, 175, 80, 0.6);
+    }}
+    
+    .feedback-confirming-text {{
+        position: relative;
+        z-index: 1;
+    }}
     .feedback-incorrect {{
         background-color: var(--error-color);
         color: white;
@@ -660,7 +688,7 @@ def show_practice_mode():
         run_camera = st.checkbox("เปิดกล้อง", value=True, key="practice_camera_checkbox")
         
         if run_camera:
-            run_webcam_detection(update_stats_display, camera_width=640)
+            run_webcam_detection(update_stats_display, camera_width=1280)
 
 def run_test_detection(target_letter, update_timer_callback=None):
     """Run camera detection for test mode with auto-skip"""
@@ -700,11 +728,12 @@ def run_test_detection(target_letter, update_timer_callback=None):
         
         # Flip frame horizontally
         frame = cv2.flip(frame, 1)
+        
+        # Convert to RGB once (optimized)
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Store frame for CNN models
-        frame_for_cnn = frame.copy()
-        st.session_state.frame_buffer.append(frame_for_cnn)
+        # Store frame for CNN models (avoid unnecessary copy)
+        st.session_state.frame_buffer.append(frame)
         if len(st.session_state.frame_buffer) > 30:
             st.session_state.frame_buffer.pop(0)
         
@@ -739,8 +768,10 @@ def run_test_detection(target_letter, update_timer_callback=None):
                         if predicted_letter == target_letter:
                             detection_frames += 1
                             progress = int((detection_frames / required_frames) * 100)
+
                             feedback_message = f"✅ ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - กำลังยืนยัน... {progress}%"
-                            feedback_class = "feedback-correct"
+                            feedback_class = "feedback-confirming"
+                            feedback_progress = progress
                             
                             # If confirmed, auto-skip to next question
                             if detection_frames >= required_frames:
@@ -758,14 +789,17 @@ def run_test_detection(target_letter, update_timer_callback=None):
                             detection_frames = 0
                             feedback_message = f"❌ ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - ต้องการ: {target_letter}"
                             feedback_class = "feedback-incorrect"
+                            feedback_progress = 0
                     else:
                         detection_frames = 0
                         feedback_message = "⏳ กำลังตรวจจับ..."
                         feedback_class = "feedback-warning"
+                        feedback_progress = 0
         else:
             detection_frames = 0
             feedback_message = "✋ ไม่พบมือ - กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
+            feedback_progress = 0
         
         # Add skeleton detection indicator
         if skeleton_detected:
@@ -776,9 +810,20 @@ def run_test_detection(target_letter, update_timer_callback=None):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
         
-        # Show feedback
+        # Show feedback with progress bar
         if feedback_message:
-            if feedback_class == "feedback-correct":
+            if feedback_class == "feedback-confirming":
+                feedback_placeholder.markdown(
+                    f'''<div class="feedback-confirming">
+                        <div class="feedback-confirming-text">{feedback_message}</div>
+                        <div style="position: absolute; left: 0; top: 0; width: {feedback_progress}%; height: 100%; 
+                             background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%); 
+                             border-radius: 10px; z-index: 0;
+                             box-shadow: 2px 0 10px rgba(76, 175, 80, 0.6);"></div>
+                    </div>''',
+                    unsafe_allow_html=True
+                )
+            elif feedback_class == "feedback-correct":
                 feedback_placeholder.success(feedback_message)
             elif feedback_class == "feedback-incorrect":
                 feedback_placeholder.error(feedback_message)
@@ -807,6 +852,10 @@ def run_webcam_detection(update_stats_callback=None, camera_width=1280):
     
     stop_button = st.button("⏹️ หยุดกล้อง")
     
+    # Frame-based confirmation (like test mode)
+    detection_frames = 0
+    required_frames = 30  # Need 30 consecutive frames for confirmation
+    
     while not stop_button:
         # Update stats in real-time if callback provided
         if update_stats_callback:
@@ -820,12 +869,11 @@ def run_webcam_detection(update_stats_callback=None, camera_width=1280):
         # Flip frame horizontally for mirror effect
         frame = cv2.flip(frame, 1)
         
-        # Convert to RGB
+        # Convert to RGB once for MediaPipe (more efficient)
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Store raw frame for CNN models (before drawing)
-        frame_for_cnn = frame.copy()
-        st.session_state.frame_buffer.append(frame_for_cnn)
+        # Store raw frame for CNN models (avoid unnecessary copy)
+        st.session_state.frame_buffer.append(frame)
         if len(st.session_state.frame_buffer) > 30:
             st.session_state.frame_buffer.pop(0)
         
@@ -855,7 +903,7 @@ def run_webcam_detection(update_stats_callback=None, camera_width=1280):
                 if hand_size < 0.2:
                     feedback_message = "🔍 มือเล็กไป กรุณาเข้าใกล้กล้อง"
                     feedback_class = "feedback-warning"
-                    st.session_state.practice_confirmation.reset()
+                    detection_frames = 0
                 elif len(st.session_state.keypoint_buffer) >= 15:
                     # Predict
                     predicted_letter, confidence = predict_asl(
@@ -865,64 +913,54 @@ def run_webcam_detection(update_stats_callback=None, camera_width=1280):
                         ALPHABET
                     )
                     
-                    if predicted_letter and confidence is not None:
+                    if predicted_letter and confidence is not None and confidence >= 0.75:
                         is_correct = predicted_letter == st.session_state.current_letter
                         
-                        # Add to confirmation manager
-                        is_confirmed, progress, elapsed = st.session_state.practice_confirmation.add_detection(
-                            predicted_letter, confidence
-                        )
-                        
-                        if is_confirmed and is_correct:
-                            # Confirmed correct answer
-                            feedback_message = f"✅ ถูกต้อง! {predicted_letter} ({confidence*100:.0f}%)"
-                            feedback_class = "feedback-correct"
+                        if is_correct:
+                            # Correct letter detected
+                            detection_frames += 1
+                            progress = int((detection_frames / required_frames) * 100)
                             
-                            # Update stats
-                            st.session_state.stats['attempts'] += 1
-                            st.session_state.stats['correct'] += 1
-                            st.session_state.stats['total_accuracy'] += confidence * 100
-                            
-                            # Clear buffer and reset confirmation
-                            st.session_state.keypoint_buffer = []
-                            st.session_state.practice_confirmation.reset()
-                            time.sleep(0.5)
-                        elif is_confirmed and not is_correct:
-                            # Confirmed wrong answer
-                            feedback_message = f"❌ ผิด: {predicted_letter} - เป้าหมาย: {st.session_state.current_letter}"
-                            feedback_class = "feedback-incorrect"
-                            
-                            # Update stats (count mistake)
-                            st.session_state.stats['attempts'] += 1
-                            st.session_state.stats['total_accuracy'] += 0  # Add 0 for incorrect
-                            
-                            # Reset
-                            st.session_state.keypoint_buffer = []
-                            st.session_state.practice_confirmation.reset()
-                            time.sleep(0.5)
-                        elif progress > 0:
-                            # Detecting, show progress
-                            if is_correct:
-                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress:.0f}% - {elapsed:.1f}s)"
+                            if detection_frames >= required_frames:
+                                # Confirmed correct answer
+                                feedback_message = f"✅ ถูกต้อง! {predicted_letter} ({confidence*100:.0f}%)"
                                 feedback_class = "feedback-correct"
+                                
+                                # Update stats
+                                st.session_state.stats['attempts'] += 1
+                                st.session_state.stats['correct'] += 1
+                                st.session_state.stats['total_accuracy'] += confidence * 100
+                                
+                                # Clear buffer and reset
+                                st.session_state.keypoint_buffer = []
+                                detection_frames = 0
+                                time.sleep(0.5)
                             else:
-                                feedback_message = f"⚠️ ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - ต้องการ: {st.session_state.current_letter}"
-                                feedback_class = "feedback-warning"
+                                # Confirming
+                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress}%)"
+                                feedback_class = "feedback-confirming"
+                                feedback_progress = progress
                         else:
-                            feedback_message = "⏳ กำลังตรวจจับ..."
-                            feedback_class = "feedback-warning"
+                            # Wrong letter
+                            detection_frames = 0
+                            feedback_message = f"❌ ตรวจจับได้: {predicted_letter} ({confidence*100:.0f}%) - ต้องการ: {st.session_state.current_letter}"
+                            feedback_class = "feedback-incorrect"
+                            feedback_progress = 0
                     else:
+                        detection_frames = 0
                         feedback_message = "⏳ กำลังตรวจจับ..."
                         feedback_class = "feedback-warning"
-                        st.session_state.practice_confirmation.reset()
+                        feedback_progress = 0
                 else:
+                    detection_frames = 0
                     feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
                     feedback_class = "feedback-warning"
-                    st.session_state.practice_confirmation.reset()
+                    feedback_progress = 0
         else:
+            detection_frames = 0
             feedback_message = "✋ ไม่พบมือ กรุณาแสดงมือในกล้อง"
             feedback_class = "feedback-warning"
-            st.session_state.practice_confirmation.reset()
+            feedback_progress = 0
         
         # Add skeleton detection indicator
         if skeleton_detected:
@@ -931,14 +969,184 @@ def run_webcam_detection(update_stats_callback=None, camera_width=1280):
         
         # Display frame with dynamic width based on parameter
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=camera_width)
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
         
-        # Display feedback
+        # Display feedback with progress bar
         if feedback_message:
-            feedback_placeholder.markdown(
-                f'<div class="{feedback_class}">{feedback_message}</div>',
-                unsafe_allow_html=True
-            )
+            if feedback_class == "feedback-confirming":
+                feedback_placeholder.markdown(
+                    f'''<div class="feedback-confirming" style="--progress: {feedback_progress}%;">
+                        <div class="feedback-confirming-text">{feedback_message}</div>
+                        <div style="position: absolute; left: 0; top: 0; width: {feedback_progress}%; height: 100%; 
+                             background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%); 
+                             border-radius: 10px; z-index: 0;
+                             box-shadow: 2px 0 10px rgba(76, 175, 80, 0.6);"></div>
+                    </div>''',
+                    unsafe_allow_html=True
+                )
+            else:
+                feedback_placeholder.markdown(
+                    f'<div class="{feedback_class}">{feedback_message}</div>',
+                    unsafe_allow_html=True
+                )
+    
+    cap.release()
+
+def run_translation_detection(update_translation_callback=None):
+    """Run camera detection for real-time translation mode - optimized for performance"""
+    hands, mp_drawing, mp_hands = init_mediapipe()
+    
+    FRAME_WINDOW = st.image([])
+    feedback_placeholder = st.empty()
+    
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    
+    if not cap.isOpened():
+        st.error("❌ ไม่สามารถเปิดกล้องได้")
+        return
+    
+    stop_button = st.button("⏹️ หยุดกล้อง")
+    
+    # Frame-based confirmation (like test mode)
+    detection_frames = 0
+    required_frames = 30  # Need 30 consecutive frames for confirmation
+    last_confirmed_letter = None  # Track to avoid duplicates
+    
+    while not stop_button:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Flip frame horizontally for mirror effect
+        frame = cv2.flip(frame, 1)
+        
+        # Convert to RGB once for MediaPipe
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Store raw frame for CNN models (before any processing)
+        st.session_state.frame_buffer.append(frame.copy())
+        if len(st.session_state.frame_buffer) > 30:
+            st.session_state.frame_buffer.pop(0)
+        
+        # Process with MediaPipe
+        results = hands.process(image_rgb)
+        
+        feedback_message = ""
+        feedback_class = "feedback-warning"
+        skeleton_detected = False
+        
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                skeleton_detected = True
+                
+                # Extract keypoints
+                keypoints = extract_keypoints(hand_landmarks)
+                st.session_state.translation_buffer.append(keypoints)
+                
+                # Keep buffer size manageable
+                if len(st.session_state.translation_buffer) > 60:
+                    st.session_state.translation_buffer.pop(0)
+                
+                # Check hand size
+                bbox = calculate_bbox(hand_landmarks)
+                hand_size = max(bbox['width'], bbox['height'])
+                
+                if hand_size < 0.2:
+                    feedback_message = "🔍 มือเล็กไป กรุณาเข้าใกล้กล้อง"
+                    feedback_class = "feedback-warning"
+                    detection_frames = 0
+                    feedback_progress = 0
+                elif len(st.session_state.translation_buffer) >= 15:
+                    # Predict letter
+                    predicted_letter, confidence = predict_asl(
+                        frame,
+                        hand_landmarks,
+                        st.session_state.translation_buffer,
+                        ALPHABET
+                    )
+                    
+                    if predicted_letter and confidence is not None and confidence >= 0.75:
+                        # Check if same as last confirmed (avoid duplicates)
+                        if predicted_letter == last_confirmed_letter:
+                            detection_frames += 1
+                            progress = int((detection_frames / required_frames) * 100)
+                            
+                            if detection_frames >= required_frames:
+                                # Confirmed - add letter
+                                st.session_state.translated_text += predicted_letter
+                                feedback_message = f"✅ เพิ่ม: {predicted_letter}"
+                                feedback_class = "feedback-correct"
+                                feedback_progress = 100
+                                
+                                # Update displays in real-time
+                                if update_translation_callback:
+                                    update_translation_callback()
+                                
+                                # Reset and wait for hand to be removed
+                                detection_frames = 0
+                                last_confirmed_letter = None
+                                st.session_state.translation_buffer = []
+                                time.sleep(0.5)
+                            else:
+                                # Confirming same letter
+                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress}%)"
+                                feedback_class = "feedback-confirming"
+                                feedback_progress = progress
+                        else:
+                            # New letter detected
+                            last_confirmed_letter = predicted_letter
+                            detection_frames = 1
+                            feedback_message = f"🎯 ตรวจจับ: {predicted_letter} ({confidence*100:.0f}%)"
+                            feedback_class = "feedback-warning"
+                            feedback_progress = 0
+                    else:
+                        detection_frames = 0
+                        last_confirmed_letter = None
+                        feedback_message = "⏳ กำลังวิเคราะห์..."
+                        feedback_class = "feedback-warning"
+                        feedback_progress = 0
+                else:
+                    detection_frames = 0
+                    last_confirmed_letter = None
+                    feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
+                    feedback_class = "feedback-warning"
+                    feedback_progress = 0
+        else:
+            detection_frames = 0
+            last_confirmed_letter = None
+            feedback_message = "👋 กรุณาแสดงมือต่อกล้อง"
+            feedback_class = "feedback-warning"
+            feedback_progress = 0
+        
+        # Add skeleton detection indicator (text only, no drawing)
+        if skeleton_detected:
+            cv2.putText(frame, "Hand Detected", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Display frame - convert once for display
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
+        
+        # Display feedback with progress bar
+        if feedback_message:
+            if feedback_class == "feedback-confirming":
+                feedback_placeholder.markdown(
+                    f'''<div class="feedback-confirming">
+                        <div class="feedback-confirming-text">{feedback_message}</div>
+                        <div style="position: absolute; left: 0; top: 0; width: {feedback_progress}%; height: 100%; 
+                             background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%); 
+                             border-radius: 10px; z-index: 0;
+                             box-shadow: 2px 0 10px rgba(76, 175, 80, 0.6);"></div>
+                    </div>''',
+                    unsafe_allow_html=True
+                )
+            else:
+                feedback_placeholder.markdown(
+                    f'<div class="{feedback_class}">{feedback_message}</div>',
+                    unsafe_allow_html=True
+                )
     
     cap.release()
 
@@ -1062,136 +1270,8 @@ Refined:"""
     # Camera section - compact
     st.markdown("### 📹 กล้อง")
     
-    # Initialize MediaPipe
-    hands, mp_drawing, mp_hands = init_mediapipe()
-    
-    FRAME_WINDOW = st.image([])
-    
-    feedback_placeholder = st.empty()
-    
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Reduced resolution (same as test mode)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    
-    if not cap.isOpened():
-        st.error("❌ ไม่สามารถเปิดกล้องได้")
-        return
-    
-    stop_button = st.button("⏹️ หยุดกล้อง")
-    
-    while not stop_button:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        frame = cv2.flip(frame, 1)
-        
-        # Store raw frame for CNN models (before drawing)
-        frame_for_cnn = frame.copy()
-        st.session_state.frame_buffer.append(frame_for_cnn)
-        if len(st.session_state.frame_buffer) > 30:
-            st.session_state.frame_buffer.pop(0)
-        
-        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(image_rgb)
-        
-        feedback_message = ""
-        feedback_class = "feedback-warning"
-        skeleton_detected = False
-        
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                skeleton_detected = True
-                
-                # # Draw hand landmarks with green color (like practice/test mode)
-                # mp_drawing.draw_landmarks(
-                #     frame,
-                #     hand_landmarks,
-                #     mp_hands.HAND_CONNECTIONS,
-                #     mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),  # Green points
-                #     mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2)  # Green connections
-                # )
-                
-                # Extract keypoints
-                keypoints = extract_keypoints(hand_landmarks)
-                st.session_state.translation_buffer.append(keypoints)
-                
-                # Keep buffer size manageable
-                if len(st.session_state.translation_buffer) > 30:
-                    st.session_state.translation_buffer.pop(0)
-                
-                # Check hand size
-                bbox = calculate_bbox(hand_landmarks)
-                
-                if bbox['width'] >= 0.15 and bbox['height'] >= 0.15:
-                    if len(st.session_state.translation_buffer) >= 15:
-                        # Predict letter
-                        predicted_letter, confidence = predict_asl(
-                            frame,
-                            hand_landmarks,
-                            st.session_state.translation_buffer,
-                            ALPHABET
-                        )
-                        
-                        if predicted_letter and confidence is not None:
-                            # Use ConfirmationManager for time-based confirmation
-                            is_confirmed, progress, elapsed = st.session_state.translation_confirmation.add_detection(
-                                predicted_letter, confidence
-                            )
-                            
-                            if is_confirmed:
-                                # Add confirmed letter
-                                st.session_state.translated_text += predicted_letter
-                                feedback_message = f"✅ เพิ่ม: {predicted_letter}"
-                                feedback_class = "feedback-correct"
-                                
-                                # Update displays in real-time
-                                update_translation_displays()
-                                
-                                # Reset
-                                st.session_state.translation_confirmation.reset()
-                                st.session_state.translation_buffer = []
-                                time.sleep(0.5)
-                            elif progress > 0:
-                                feedback_message = f"🎯 กำลังยืนยัน: {predicted_letter} ({progress:.0f}% - {elapsed:.1f}s)"
-                                feedback_class = "feedback-warning"
-                            else:
-                                feedback_message = "⏳ กำลังตรวจจับ..."
-                                feedback_class = "feedback-warning"
-                        else:
-                            feedback_message = "⏳ กำลังวิเคราะห์..."
-                            feedback_class = "feedback-warning"
-                            st.session_state.translation_confirmation.reset()
-                    else:
-                        feedback_message = "⏳ กำลังรวบรวมข้อมูล..."
-                        feedback_class = "feedback-warning"
-                        st.session_state.translation_confirmation.reset()
-                else:
-                    feedback_message = "⚠️ วางมือให้อยู่ในกรอบและให้มีขนาดที่เหมาะสม"
-                    feedback_class = "feedback-warning"
-                    st.session_state.translation_confirmation.reset()
-        else:
-            feedback_message = "👋 กรุณาแสดงมือต่อกล้อง"
-            feedback_class = "feedback-warning"
-            st.session_state.translation_confirmation.reset()
-        
-        # Add skeleton detection indicator
-        if skeleton_detected:
-            cv2.putText(frame, "Hand Detected", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Display frame - same size as test mode
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=640)
-        
-        # Display feedback
-        if feedback_message:
-            feedback_placeholder.markdown(
-                f'<div class="{feedback_class}">{feedback_message}</div>',
-                unsafe_allow_html=True
-            )
-    
-    cap.release()
+    # Use dedicated translation detection function
+    run_translation_detection(update_translation_displays)
 
 def show_test_mode():
     """Test Mode - Complete assessment"""
