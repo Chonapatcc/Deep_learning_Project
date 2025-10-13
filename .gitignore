@@ -42,6 +42,8 @@ datasets/*
 # models/*.h5
 # models/*.pb
 # models/*/
+*.pkl
+*.pth
 
 # IDE
 .vscode/
