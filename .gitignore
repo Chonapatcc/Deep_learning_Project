@@ -23,27 +23,39 @@ wheels/
 .installed.cfg
 *.egg
 
+# Data directories - Simplified structure
+data/asl_dataset/**
+!data/asl_dataset/.gitkeep
+
+# Old dataset structure (legacy)
+data/raw/**
+data/processed/**
+data/asl_dataset_old/**
+dataset/raw_videos/*.mp4
+dataset/raw_videos/*.avi
+dataset/raw_videos/*.mov
+datasets/*
+
 # Environment variables (IMPORTANT: Never commit .env files!)
 .env
 .env.local
 .env.*.local
 
-# Dataset (large files)
-dataset/raw_videos/*.mp4
-dataset/raw_videos/*.avi
-dataset/raw_videos/*.mov
+# Model and data files
 *.h5
 *.hdf5
 *.npy
 *.npz
-datasets/*
 
-# Model files (optional, uncomment if not tracking models)
-# models/*.h5
-# models/*.pb
-# models/*/
-*.pkl
-*.pth
+# Keep model weights in models/ but ignore in data/
+# models/*.pkl  # Uncomment to ignore model weights
+# models/*.pth  # Uncomment to ignore model weights
+data/**/*.pkl
+data/**/*.pth
+
+# Backup folders
+_old_*/
+_backup_*/
 
 # IDE
 .vscode/

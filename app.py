@@ -16,20 +16,20 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import configuration
-import config
-from config import (
+from src import config
+from src.config import (
     PreprocessConfig, HandDetectionConfig, InferenceConfig,
-    ModelConfig, PracticeModeConfig, TestModeConfig, UIConfig,
+    ModelConfig, PracticeModeConfig, TestModeConfig, UIConfig, DataConfig,
     get_preprocess_function, get_resize_dimensions, get_color_conversion,
     THEMES
 )
 
 # Import utility functions
-from utils.model_loader import init_mediapipe, load_models
-from utils.prediction import predict_letter
-from utils.hand_processing import extract_keypoints, calculate_bbox
-from utils.letter_data import get_letter_instructions
-from utils.confirmation import ConfirmationManager
+from src.utils.model_loader import init_mediapipe, load_models
+from src.utils.prediction import predict_letter
+from src.utils.hand_processing import extract_keypoints, calculate_bbox
+from src.utils.letter_data import get_letter_instructions
+from src.utils.confirmation import ConfirmationManager
 
 # Load environment variables from .env file
 try:
@@ -543,9 +543,9 @@ def show_letter_detail(letter):
     
     with col_img:
         # Load images from dataset
-        dataset_path = f"datasets/asl_dataset/{letter.lower()}"
+        dataset_path = os.path.join(DataConfig.DATASET_PATH, letter.upper())
         if os.path.exists(dataset_path):
-            images = glob.glob(f"{dataset_path}/*.jpeg")
+            images = glob.glob(f"{dataset_path}/*.jpg") + glob.glob(f"{dataset_path}/*.jpeg") + glob.glob(f"{dataset_path}/*.png")
             
             if images:
                 # Ensure index is within bounds
@@ -655,10 +655,10 @@ def show_practice_mode():
         
         # Load reference images from dataset - show only 1 image
         letter = st.session_state.current_letter
-        dataset_path = f"datasets/asl_dataset/{letter.lower()}"
+        dataset_path = os.path.join(DataConfig.DATASET_PATH, letter.upper())
         
         if os.path.exists(dataset_path):
-            images = glob.glob(f"{dataset_path}/*.jpeg")
+            images = glob.glob(f"{dataset_path}/*.jpg") + glob.glob(f"{dataset_path}/*.jpeg") + glob.glob(f"{dataset_path}/*.png")
             
             if images:
                 # Show only 1 image to save space - use caching to prevent MediaFileStorageError

@@ -101,13 +101,13 @@ class ASLDataPreprocessor:
         noise = np.random.normal(0, noise_level, landmarks.shape)
         return landmarks + noise
     
-    def process_dataset(self, dataset_path, augment=True, augment_factor=2,
+    def process_dataset(self, dataset_path='data/asl_dataset', augment=True, augment_factor=2,
                        filter_alphabet_only=True):
         """
         Process entire dataset folder structure
         
         Args:
-            dataset_path: Path to dataset folder
+            dataset_path: Path to dataset folder (default: data/asl_dataset)
             augment: Whether to augment data
             augment_factor: How many augmented samples per original
             filter_alphabet_only: Only process A-Z folders (skip numbers)

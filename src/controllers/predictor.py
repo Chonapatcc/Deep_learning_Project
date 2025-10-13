@@ -6,8 +6,8 @@ import torch
 import torch.nn.functional as F
 import cv2
 import pickle
-from pytorch_asl.models.classifier import ASLClassifier
-from pytorch_asl.utils.preprocessor import ASLDataPreprocessor
+from src.classifier import ASLClassifier
+from src.utils.pytorch_utils.preprocessor import ASLDataPreprocessor
 
 
 class Predictor:

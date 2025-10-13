@@ -107,14 +107,34 @@ class ModelConfig:
     TF_MODEL_PATH = "models/ayumi_chan.h5"
     TF_LABEL_ENCODER_PATH = "models/label_encoder2.pkl"
     
-    # PyTorch model paths
-    PYTORCH_MODEL_PATH = "pytorch_asl/models/best_asl_model2.pth"
-    PYTORCH_LABEL_ENCODER_PATH = "pytorch_asl/models/label_encoder2.pkl"
+    # PyTorch model paths (แก้ไขให้ใช้จาก models/ folder)
+    PYTORCH_MODEL_PATH = "models/best_asl_model2.pth"
+    PYTORCH_LABEL_ENCODER_PATH = "models/label_encoder2.pkl"
     PYTORCH_ARCHITECTURE = 'landmark'  # 'landmark' for ASLClassifier, 'cnn' for image-based
     
     # Device for PyTorch
     # Options: 'cuda', 'cpu', 'auto'
     PYTORCH_DEVICE = 'auto'  # Auto-detect GPU/CPU
+
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+
+class DataConfig:
+    """Dataset paths and settings"""
+    
+    # Data directories - simplified structure
+    DATA_ROOT = "data/"
+    DATASET_PATH = "data/asl_dataset"  # Main dataset folder (no raw/processed split)
+    
+    # Kaggle dataset info
+    KAGGLE_DATASET = "ayuraj/asl-dataset"
+    
+    # Training/validation split
+    TRAIN_SPLIT = 0.8
+    VAL_SPLIT = 0.1
+    TEST_SPLIT = 0.1
 
 
 # ==============================================================================

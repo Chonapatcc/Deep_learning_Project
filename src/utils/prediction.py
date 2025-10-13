@@ -7,8 +7,8 @@ import streamlit as st
 import numpy as np
 
 # Import configuration and preprocessing
-from config import should_apply_skeleton, InferenceConfig
-from utils.preprocessing import preprocess_frame
+from src.config import should_apply_skeleton, InferenceConfig
+from src.utils.preprocessing import preprocess_frame
 
 
 def predict_letter(keypoints_sequence, models_data, alphabet, landmarks=None):

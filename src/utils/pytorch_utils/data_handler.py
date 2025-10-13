@@ -4,6 +4,7 @@ Utility: Data Loading and Saving
 
 import pickle
 import numpy as np
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 
@@ -11,28 +12,34 @@ class DataHandler:
     """Handle data loading, saving, and splitting"""
     
     @staticmethod
-    def save_processed_data(X, y, output_path='processed_data.pkl'):
+    def save_processed_data(X, y, output_path='data/processed/processed_data.pkl'):
         """Save processed data to pickle file"""
+        # Create directory if not exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
         with open(output_path, 'wb') as f:
             pickle.dump({'X': X, 'y': y}, f)
         print(f"Data saved to {output_path}")
     
     @staticmethod
-    def load_processed_data(input_path='processed_data.pkl'):
+    def load_processed_data(input_path='data/processed/processed_data.pkl'):
         """Load processed data from pickle file"""
         with open(input_path, 'rb') as f:
             data = pickle.load(f)
         return data['X'], data['y']
     
     @staticmethod
-    def save_label_encoder(label_encoder, output_path='label_encoder.pkl'):
+    def save_label_encoder(label_encoder, output_path='data/processed/label_encoder.pkl'):
         """Save label encoder to pickle file"""
+        # Create directory if not exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
         with open(output_path, 'wb') as f:
             pickle.dump(label_encoder, f)
         print(f"Label encoder saved to {output_path}")
     
     @staticmethod
-    def load_label_encoder(input_path='label_encoder.pkl'):
+    def load_label_encoder(input_path='data/processed/label_encoder.pkl'):
         """Load label encoder from pickle file"""
         with open(input_path, 'rb') as f:
             return pickle.load(f)

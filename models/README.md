@@ -1,53 +1,61 @@
-# AI Model Directory 🤖
+# Model Weights Directory 🤖
 
 ## 📁 Purpose
 
-This directory stores **pre-trained** ASL recognition models used by the application.
+This directory stores **trained model weights only** (.pth, .pkl files) used by the application.
+
+⚠️ **Note**: Model architecture code (classifier.py, dataset.py) is located in `src/` folder.
 
 ## 📋 Current Models
 
 ### ✅ Available
-- **trained_model_10epochs.h5** - CNN model (10 training epochs)
+- **best_asl_model2.pth** - PyTorch model weights
+- **label_encoder2.pkl** - Label encoder for letter mapping
+- **asl_processed2.pkl** - Processed training data
+
+---
+
+## 🎯 Model Architecture
+
+**Model architecture is defined in:**
+- `src/classifier.py` - ASLClassifier neural network
+- `src/dataset.py` - Dataset handler
+- `src/controllers/predictor.py` - Prediction logic
+- `src/controllers/trainer.py` - Training logic
+
+**This folder contains only:**
+- ✅ Trained weights (.pth files)
+- ✅ Label encoders (.pkl files)
+- ✅ Processed data (.pkl files)
+- ❌ No Python code for model architecture
 
 ---
 
 ## 🎯 Supported Model Types
 
-### 1. CNN Model (Deep Learning) - **Currently Active**
+### 1. PyTorch Model (.pth) - **Currently Active**
 ```
-models/trained_model_10epochs.h5  # ← Your current model
-```
-
-**Alternative names supported:**
-```
-models/best_transfer_CNN.keras
-models/asl_cnn_model.h5
-models/asl_cnn_model.keras
-models/asl_model.h5
-models/asl_model.keras
+models/best_asl_model2.pth         # Model weights
+models/label_encoder2.pkl          # Label encoder
+models/asl_processed2.pkl          # Processed data
 ```
 
 **Specs:**
-- Size: ~50-100 MB
-- Training time: 1-4 hours (GPU recommended)
-- Accuracy: ~85-95%
-- Inference speed: ~50-100ms
-- Auto-creates label encoder if missing
+- Architecture: ResNet-based (defined in src/classifier.py)
+- Input: 63 features (21 hand landmarks × 3 coordinates)
+- Output: 26 classes (A-Z)
+- Size: ~10-50 MB
+- Inference speed: ~10-30ms
 
 ---
 
-### 2. ML Model (RandomForest) - Optional Alternative
-```
-models/asl_model.pkl
-```
+### 2. Alternative Model Formats (Optional)
 
-**Contains:**
-- Trained RandomForest classifier
-- Label encoder for letter mapping
-
-**How to create:**
-```bash
-python preprocess_data.py
+**TensorFlow/Keras (.h5, .keras):**
+```
+models/trained_model_10epochs.h5
+models/asl_cnn_model.h5
+models/best_transfer_CNN.keras
 ```
 
 **Specs:**

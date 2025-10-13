@@ -137,6 +137,90 @@ streamlit run app.py
 
 ---
 
+## 📁 Project Structure
+
+โครงสร้างโปรเจคที่จัดระเบียบและเข้าใจง่าย เหมาะสำหรับการพัฒนาและ reproducible research:
+
+```
+Deep_learning_Project/
+├── 📂 data/                    # ชุดข้อมูลสำหรับการ training
+│   ├── raw/                   # ข้อมูลดิบ (ถ้ามี)
+│   ├── processed/             # ข้อมูลที่ประมวลผลแล้ว
+│   └── README.md              # คำแนะนำเกี่ยวกับข้อมูล
+│
+├── 📂 src/                     # Source code หลัก
+│   ├── classifier.py          # ⭐ ASL Classifier architecture (ResNet-based)
+│   ├── dataset.py             # ⭐ Dataset handler
+│   ├── config.py              # Configuration settings
+│   ├── __init__.py
+│   │
+│   ├── 📂 models/             # ⚠️ Organization only (ว่างเปล่า)
+│   │   ├── __init__.py
+│   │   └── README.md
+│   │
+│   ├── 📂 controllers/        # Logic สำหรับ training/prediction
+│   │   ├── trainer.py        # Training logic
+│   │   ├── predictor.py      # Prediction logic
+│   │   ├── evaluator.py      # Model evaluation
+│   │   └── __init__.py
+│   │
+│   ├── 📂 utils/              # Utility functions
+│   │   ├── model_loader.py   # โหลดโมเดลต่างๆ (TF/PyTorch/ONNX)
+│   │   ├── preprocessing.py  # Preprocessing frames
+│   │   ├── prediction.py     # Prediction utilities
+│   │   ├── hand_processing.py # Hand landmark processing
+│   │   ├── letter_data.py    # ข้อมูลตัวอักษร A-Z
+│   │   ├── confirmation.py   # Confirmation manager
+│   │   ├── pytorch_utils/    # PyTorch-specific utilities
+│   │   │   ├── preprocessor.py
+│   │   │   └── data_handler.py
+│   │   └── __init__.py
+│   │
+│   ├── 📂 views/              # Display/Visualization
+│   │   ├── camera_view.py    # Camera display
+│   │   ├── visualizer.py     # Visualization tools
+│   │   └── __init__.py
+│   │
+│   └── __init__.py
+│
+├── 📂 models/                  # ⭐ Model weights ONLY (.pth, .pkl files)
+│   ├── best_asl_model2.pth    # PyTorch model weights
+│   ├── label_encoder2.pkl     # Label encoder
+│   ├── asl_processed2.pkl     # Processed data
+│   └── README.md              # คำอธิบายโมเดล
+│
+├── 📂 demos/                   # Demo videos/screenshots
+│   ├── easy.mp4               # Scenario 1: Easy
+│   ├── medium.mp4             # Scenario 2: Medium
+│   ├── hard.mp4               # Scenario 3: Hard
+│   └── README.md              # คำอธิบาย demos
+│
+├── 📄 app.py                   # 🚀 Main Streamlit Application
+├── 📄 requirements.txt         # Python dependencies
+├── 📄 .env                     # Environment variables (API keys)
+├── 📄 .env.example             # ตัวอย่างไฟล์ .env
+├── 📄 README.md                # เอกสารหลัก (ไฟล์นี้)
+├── 📄 CHANGELOG.md             # ประวัติการอัปเดต
+└── 📄 todo.txt                 # Task list
+
+📚 Documentation/ (ย้ายไปยัง root level)
+├── ONE_PAGE_SETUP.md           # Setup ใน 1 หน้า
+├── QUICKSTART.md               # Quick start guide
+├── TRAINING_GUIDE.md           # Training guide
+├── TRANSLATION_MODE_GUIDE.md   # Translation mode guide
+└── ... (ดูรายละเอียดทั้งหมดในส่วน Documentation)
+```
+
+### 🎯 โครงสร้างนี้มีประโยชน์อย่างไร?
+
+- ✅ **Reproducible**: ใครก็สามารถ clone และรันได้ทันที
+- ✅ **Maintainable**: แยกส่วนต่างๆ ชัดเจน แก้ไขง่าย
+- ✅ **Scalable**: เพิ่มฟีเจอร์ใหม่ได้สะดวก
+- ✅ **Academic-friendly**: เหมาะสำหรับ research และ presentation
+- ✅ **Industry-standard**: ตามมาตรฐานโครงสร้าง ML project
+
+---
+
 ## 🎯 วัตถุประสงค์
 
 ช่วยให้ผู้เริ่มต้นสามารถเรียนรู้และฝึกฝนการสะกดคำด้วยมือ (fingerspelling) ได้อย่างมีประสิทธิภาพ พร้อมรับผลตอบรับที่ชัดเจนและทันที

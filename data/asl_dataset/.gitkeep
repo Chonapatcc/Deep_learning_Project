@@ -1,0 +1,10 @@
+# This file keeps the data/asl_dataset directory in git
+# 
+# Download ASL dataset:
+#   python download_dataset.py
+#
+# Or place your dataset here manually:
+#   data/asl_dataset/
+#   ├── a/
+#   ├── b/
+#   └── ... (z)

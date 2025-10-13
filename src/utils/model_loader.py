@@ -10,7 +10,7 @@ import pickle
 import numpy as np
 
 # Import configuration
-import config
+from src import config
 ModelConfig = config.ModelConfig
 
 # Try to import TensorFlow/Keras
@@ -31,8 +31,8 @@ except ImportError:
 
 # Try to import PyTorch ASL classes
 try:
-    from pytorch_asl.models.classifier import ASLClassifier
-    from pytorch_asl.controllers.predictor import Predictor
+    from src.classifier import ASLClassifier
+    from src.controllers.predictor import Predictor
     PYTORCH_ASL_AVAILABLE = True
 except ImportError as e:
     PYTORCH_ASL_AVAILABLE = False

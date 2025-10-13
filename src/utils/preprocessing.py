@@ -5,7 +5,7 @@ Handles different preprocessing approaches and skeleton detection
 
 import cv2
 import numpy as np
-from config import (
+from src.config import (
     PreprocessConfig, HandDetectionConfig, InferenceConfig,
     get_preprocess_function, get_resize_dimensions, get_color_conversion,
     should_apply_skeleton, is_skeleton_only
