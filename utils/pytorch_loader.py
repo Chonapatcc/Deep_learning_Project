@@ -5,13 +5,92 @@ Load and use PyTorch models in the Streamlit app
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import pickle
 from pathlib import Path
+from torchvision import models
 
+
+class ASLClassifier(nn.Module):
+    """
+    Simple MLP Neural Network for ASL Recognition
+    Input: 63 features (21 landmarks × 3 coordinates)
+    Output: Probability distribution over alphabet classes
+    
+    This is the ACTUAL architecture used in the trained model (best_asl_model.pth)
+    """
+    
+    def __init__(self, input_size=63, num_classes=26, dropout=0.3):
+        super(ASLClassifier, self).__init__()
+        
+        self.fc1 = nn.Linear(input_size, 128)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.dropout1 = nn.Dropout(dropout)
+        
+        self.fc2 = nn.Linear(128, 64)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.dropout2 = nn.Dropout(dropout)
+        
+        self.fc3 = nn.Linear(64, num_classes)
+    
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.dropout1(x)
+        
+        x = self.fc2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = self.dropout2(x)
+        
+        x = self.fc3(x)
+        return x
+
+
+class ASLClassifierResNet18(nn.Module):
+    """
+    ASL Classifier using ResNet18 backbone for 63-feature landmark input
+    Accepts MediaPipe hand landmarks (21 points × 3 coordinates = 63 features)
+    
+    This is an ALTERNATIVE architecture for future training
+    """
+    
+    def __init__(self, num_classes=26):
+        super(ASLClassifierResNet18, self).__init__()
+        # Load pre-trained ResNet18
+        self.resnet = models.resnet18(weights='ResNet18_Weights.DEFAULT')
+
+        # Replace the input layer to accept 1 channel instead of 3 channels
+        # This is for 63 features reshaped as (1, 63, 1)
+        original_conv1 = self.resnet.conv1
+        self.resnet.conv1 = nn.Conv2d(1, original_conv1.out_channels,
+                                      kernel_size=original_conv1.kernel_size,
+                                      stride=original_conv1.stride,
+                                      padding=original_conv1.padding,
+                                      bias=original_conv1.bias)
+
+        # Replace the final fully connected layer
+        num_ftrs = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
+
+    def forward(self, x):
+        # Reshape input to be 4D (batch_size, channels, height, width)
+        # Since we have 63 features, we can treat this as 1 channel with 63x1 dimensions
+        # For ResNet compatibility: (batch_size, 1, 63, 1)
+        batch_size = x.size(0)
+        x = x.view(batch_size, 1, 63, 1)  # Reshape for ResNet input
+
+        x = self.resnet(x)
+        return x
+
+
+# ==================== LEGACY ARCHITECTURES (For backward compatibility) ====================
+# These are kept for reference but the main model is ASLClassifier above
 
 class ASLClassifierMobileNetV2(nn.Module):
-    """ASL Classifier using MobileNetV2 backbone"""
+    """ASL Classifier using MobileNetV2 backbone (Legacy - for image input)"""
     
     def __init__(self, num_classes=36):
         super().__init__()
@@ -29,7 +108,7 @@ class ASLClassifierMobileNetV2(nn.Module):
 
 
 class ASLClassifierResNet50(nn.Module):
-    """ASL Classifier using ResNet50 backbone"""
+    """ASL Classifier using ResNet50 backbone (Legacy - for image input)"""
     
     def __init__(self, num_classes=36):
         super().__init__()
@@ -45,7 +124,7 @@ class ASLClassifierResNet50(nn.Module):
 
 
 class ASLClassifierCustomCNN(nn.Module):
-    """Custom CNN for ASL Classification"""
+    """Custom CNN for ASL Classification (Legacy - for image input)"""
     
     def __init__(self, num_classes=36):
         super().__init__()
@@ -87,13 +166,16 @@ class ASLClassifierCustomCNN(nn.Module):
         return x
 
 
-def load_pytorch_model(model_path, model_type='mobilenetv2', device='cuda'):
+def load_pytorch_model(model_path, model_type='mlp', device='cuda'):
     """
     Load PyTorch model for inference
     
     Args:
         model_path: Path to .pth checkpoint file
-        model_type: 'mobilenetv2', 'resnet50', or 'custom'
+        model_type: Model architecture type:
+            - 'mlp' (default): Simple MLP for landmarks (ASLClassifier - matches best_asl_model.pth)
+            - 'resnet18': ResNet18 for landmarks (ASLClassifierResNet18 - for future use)
+            - 'mobilenetv2', 'resnet50', 'custom': Legacy image-based models
         device: 'cuda' or 'cpu'
         
     Returns:
@@ -104,23 +186,40 @@ def load_pytorch_model(model_path, model_type='mobilenetv2', device='cuda'):
         device = 'cpu'
         print("CUDA not available, using CPU")
     
-    # Load label encoder
-    label_encoder_path = Path('models/label_encoder.pkl')
-    if label_encoder_path.exists():
-        with open(label_encoder_path, 'rb') as f:
-            label_encoder = pickle.load(f)
-    else:
-        print("Warning: Label encoder not found")
-        label_encoder = None
+    # Load label encoder - try multiple paths
+    label_encoder = None
+    encoder_paths = [
+        Path('models/label_encoder2.pkl'),
+        Path('pytorch_asl/models/label_encoder2.pkl'),
+        Path('models/label_encoder2.pkl'),
+    ]
     
-    num_classes = len(label_encoder.classes_) if label_encoder else 36
+    for encoder_path in encoder_paths:
+        if encoder_path.exists():
+            with open(encoder_path, 'rb') as f:
+                label_encoder = pickle.load(f)
+            break
     
-    # Create model
-    if model_type == 'mobilenetv2':
+    if label_encoder is None:
+        print("⚠️  Warning: Label encoder not found")
+    
+    num_classes = len(label_encoder.classes_) if label_encoder else 26
+    
+    # Create model based on type
+    if model_type == 'mlp':
+        # Default: Simple MLP for landmarks (matches best_asl_model.pth)
+        model = ASLClassifier(input_size=63, num_classes=num_classes)
+    elif model_type == 'resnet18':
+        # Alternative: ResNet18 for landmarks
+        model = ASLClassifierResNet18(num_classes=num_classes)
+    elif model_type == 'mobilenetv2':
+        # Legacy: Image-based model
         model = ASLClassifierMobileNetV2(num_classes=num_classes)
     elif model_type == 'resnet50':
+        # Legacy: Image-based model
         model = ASLClassifierResNet50(num_classes=num_classes)
     else:
+        # Legacy: Custom CNN for images
         model = ASLClassifierCustomCNN(num_classes=num_classes)
     
     # Load checkpoint
@@ -129,9 +228,11 @@ def load_pytorch_model(model_path, model_type='mobilenetv2', device='cuda'):
     model = model.to(device)
     model.eval()
     
-    print(f"PyTorch model loaded from {model_path}")
-    print(f"Device: {device}")
-    print(f"Val accuracy: {checkpoint.get('val_acc', 'N/A')}")
+    print(f"✅ PyTorch model loaded from {model_path}")
+    print(f"📱 Device: {device}")
+    print(f"🏗️  Architecture: {model_type}")
+    print(f"🎯 Classes: {num_classes}")
+    print(f"📊 Val accuracy: {checkpoint.get('val_acc', 'N/A')}")
     
     return model, label_encoder
 
@@ -141,8 +242,10 @@ def predict_pytorch(model, processed_frame, device='cuda'):
     Make prediction using PyTorch model
     
     Args:
-        model: PyTorch model
-        processed_frame: Preprocessed frame (numpy array or tensor)
+        model: PyTorch model (ASLClassifier for landmarks or legacy models for images)
+        processed_frame: Preprocessed data
+            - For ASLClassifier (landmarks): numpy array of shape (63,) or (1, 63)
+            - For legacy models (images): numpy array of shape (1, H, W, C) or tensor
         device: 'cuda' or 'cpu'
         
     Returns:
@@ -153,11 +256,20 @@ def predict_pytorch(model, processed_frame, device='cuda'):
     with torch.no_grad():
         # Convert to tensor if needed
         if isinstance(processed_frame, np.ndarray):
-            # If shape is (1, H, W, C), need to convert to (1, C, H, W)
-            if processed_frame.shape[-1] == 3:
+            # Check if it's landmark data (63 features) or image data
+            if processed_frame.ndim == 1 and processed_frame.shape[0] == 63:
+                # Single landmark vector: shape (63,) -> (1, 63)
+                tensor = torch.from_numpy(processed_frame).float().unsqueeze(0)
+            elif processed_frame.ndim == 2 and processed_frame.shape[1] == 63:
+                # Batch of landmarks: shape (batch, 63) -> keep as is
+                tensor = torch.from_numpy(processed_frame).float()
+            elif processed_frame.ndim == 4 and processed_frame.shape[-1] == 3:
+                # Image data: (1, H, W, C) -> (1, C, H, W)
                 processed_frame = np.transpose(processed_frame, (0, 3, 1, 2))
-            
-            tensor = torch.from_numpy(processed_frame).float()
+                tensor = torch.from_numpy(processed_frame).float()
+            else:
+                # Generic conversion
+                tensor = torch.from_numpy(processed_frame).float()
         else:
             tensor = processed_frame
         

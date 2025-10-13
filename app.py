@@ -962,10 +962,15 @@ def show_translation_mode():
         st.warning("⚠️ กรุณาใส่ API Key เพื่อใช้งานโหมดนี้")
         return
     
-    # Configure Gemini
+    # Configure Gemini with token limits
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Configure with 500 token limits for input and output
+        generation_config = {
+            "max_output_tokens": 500,
+            "temperature": 0.7,
+        }
+        model = genai.GenerativeModel('gemini-2.5-flash', generation_config=generation_config)
     except Exception as e:
         st.error(f"❌ ไม่สามารถเชื่อมต่อได้ กรุณาตรวจสอบ API Key")
         return
@@ -1039,15 +1044,14 @@ def show_translation_mode():
     if refine_button and st.session_state.translated_text:
         with st.spinner("🔄 กำลังปรับปรุงข้อความด้วย Gemini..."):
             try:
-                prompt = f"""You are a helpful assistant that refines text. 
-                The following text was detected from ASL fingerspelling and may contain errors or be incomplete.
-                Please refine it to make it grammatically correct and meaningful.
-                Keep the same language (if Thai, output Thai; if English, output English).
-                Only return the refined text, nothing else.
+                # Truncate text if too long to stay within 500 token limit
+                text_to_refine = st.session_state.translated_text[:400]  # Limit input length
                 
-                Original text: {st.session_state.translated_text}
-                
-                Refined text:"""
+                prompt = f"""Refine this ASL text to be grammatically correct. Keep same language. Return only refined text.
+
+Text: {text_to_refine}
+
+Refined:"""
                 
                 response = model.generate_content(prompt)
                 st.session_state.refined_text = response.text.strip()
@@ -1066,8 +1070,8 @@ def show_translation_mode():
     feedback_placeholder = st.empty()
     
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Increased resolution
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Reduced resolution (same as test mode)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
     
     if not cap.isOpened():
         st.error("❌ ไม่สามารถเปิดกล้องได้")
@@ -1098,6 +1102,15 @@ def show_translation_mode():
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 skeleton_detected = True
+                
+                # # Draw hand landmarks with green color (like practice/test mode)
+                # mp_drawing.draw_landmarks(
+                #     frame,
+                #     hand_landmarks,
+                #     mp_hands.HAND_CONNECTIONS,
+                #     mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),  # Green points
+                #     mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2)  # Green connections
+                # )
                 
                 # Extract keypoints
                 keypoints = extract_keypoints(hand_landmarks)
@@ -1167,9 +1180,9 @@ def show_translation_mode():
             cv2.putText(frame, "Hand Detected", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
-        # Display frame - larger size
+        # Display frame - same size as test mode
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=1280)
+        FRAME_WINDOW.image(frame_rgb, channels="RGB", width=640)
         
         # Display feedback
         if feedback_message:
@@ -1200,6 +1213,10 @@ def show_test_mode():
             st.session_state.test_started = True
             st.session_state.test_answers = []
             st.session_state.test_start_time = time.time()
+            # Randomize alphabet order for test
+            import random
+            st.session_state.test_alphabet = list(ALPHABET)
+            random.shuffle(st.session_state.test_alphabet)
             st.rerun()
     else:
         # Create placeholders for real-time updates
@@ -1232,21 +1249,17 @@ def show_test_mode():
             show_test_results()
         else:
             # Show current question - compact layout
-            current_letter = ALPHABET[len(st.session_state.test_answers)]
+            # Use randomized alphabet order
+            current_letter = st.session_state.test_alphabet[len(st.session_state.test_answers)]
             
             # Compact two-column: Character + Instructions | Camera
             col1, col2 = st.columns([1, 2])
             
             with col1:
                 st.markdown(f"### ทำท่าตัวอักษร:")
-                # Smaller character display
-                st.markdown(f"<div style='font-size: 3rem; text-align: center; color: #4A90E2; font-weight: bold; padding: 20px 0;'>{current_letter}</div>", 
+                # Larger character display (no instructions)
+                st.markdown(f"<div style='font-size: 5rem; text-align: center; color: #4A90E2; font-weight: bold; padding: 40px 0;'>{current_letter}</div>", 
                            unsafe_allow_html=True)
-                
-                # Compact instructions
-                st.markdown("#### 💡 วิธีทำ")
-                instructions = get_letter_instructions(current_letter)
-                st.info(instructions)
             
             with col2:
                 st.markdown("### 📷 เปิดกล้องเพื่อจับท่ามือ")

@@ -105,11 +105,11 @@ class ModelConfig:
     
     # TensorFlow model paths
     TF_MODEL_PATH = "models/ayumi_chan.h5"
-    TF_LABEL_ENCODER_PATH = "models/label_encoder.pkl"
+    TF_LABEL_ENCODER_PATH = "models/label_encoder2.pkl"
     
     # PyTorch model paths
-    PYTORCH_MODEL_PATH = "pytorch_asl/models/best_asl_model.pth"
-    PYTORCH_LABEL_ENCODER_PATH = "pytorch_asl/models/label_encoder.pkl"
+    PYTORCH_MODEL_PATH = "pytorch_asl/models/best_asl_model2.pth"
+    PYTORCH_LABEL_ENCODER_PATH = "pytorch_asl/models/label_encoder2.pkl"
     PYTORCH_ARCHITECTURE = 'landmark'  # 'landmark' for ASLClassifier, 'cnn' for image-based
     
     # Device for PyTorch
