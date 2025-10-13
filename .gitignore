@@ -42,6 +42,8 @@ data/asl_dataset_old/**
 *.hdf5
 *.npy
 *.npz
+*.pkl
+*.pth
 
 # Keep model weights in models/ but ignore in data/
 # models/*.pkl  # Uncomment to ignore model weights
