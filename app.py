@@ -1255,17 +1255,40 @@ def show_translation_mode():
                 # Truncate text if too long to stay within 500 token limit
                 text_to_refine = st.session_state.translated_text[:400]  # Limit input length
                 
-                prompt = f"""Refine this ASL text to be grammatically correct. Keep same language. Return only refined text.
+                # Improved prompt to avoid recitation issues and return only refined text
+                prompt = f"""Improve the following text by correcting grammar and making it more readable. Maintain the original meaning and language. Return ONLY the refined text without any explanations, introductions, or additional commentary.
 
 Text: {text_to_refine}
 
-Refined:"""
+Refined text:"""
                 
                 response = model.generate_content(prompt)
-                st.session_state.refined_text = response.text.strip()
-                st.rerun()
+                
+                # Check if response has valid content
+                if response.candidates and len(response.candidates) > 0:
+                    candidate = response.candidates[0]
+                    
+                    # Check finish reason
+                    if candidate.finish_reason == 1:  # STOP - successful completion
+                        if hasattr(response, 'text') and response.text:
+                            st.session_state.refined_text = response.text.strip()
+                            st.rerun()
+                        else:
+                            st.error("❌ ไม่ได้รับคำตอบจาก API")
+                    elif candidate.finish_reason == 2:  # RECITATION
+                        st.warning("⚠️ ข้อความไม่สามารถปรับปรุงได้ กรุณาลองแก้ไขข้อความหรือเขียนใหม่")
+                    elif candidate.finish_reason == 3:  # SAFETY
+                        st.warning("⚠️ เนื้อหาถูกบล็อกโดยระบบความปลอดภัย")
+                    elif candidate.finish_reason == 4:  # MAX_TOKENS
+                        st.warning("⚠️ ข้อความยาวเกินไป กรุณาลดความยาวข้อความ")
+                    else:
+                        st.error(f"❌ การปรับปรุงหยุดโดยไม่คาดคิด (รหัส: {candidate.finish_reason})")
+                else:
+                    st.error("❌ ไม่ได้รับการตอบกลับจาก API")
+                    
             except Exception as e:
-                st.error("❌ ไม่สามารถปรับปรุงข้อความได้ กรุณาลองใหม่อีกครั้ง")
+                st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+                st.info("💡 กรุณาตรวจสอบ: API Key, การเชื่อมต่ออินเทอร์เน็ต, หรือโควต้าของ API")
     
     # Camera section - compact
     st.markdown("### 📹 กล้อง")
