@@ -226,6 +226,7 @@ Deep_learning_Project/
 │   └── README.md
 │
 ├── 📂 models/                    # Model weights
+│   ├── asl_processed2.pkl
 │   ├── best_asl_model2.pth      # PyTorch model
 │   ├── label_encoder2.pkl       # Label encoder
 │   └── README.md
@@ -255,16 +256,11 @@ Deep_learning_Project/
 │   ├── medium.mp4               # Medium scenario
 │   └── hard.mp4                 # Hard scenario
 │
-├── 📂 scripts/                   # Utility scripts (ตัวเลือก)
-│   ├── preprocess.py            # Preprocess dataset
-│   ├── train.py                 # Train model
-│   └── eval.py                  # Evaluate model
 │
 ├── 📄 app.py                     # Main Streamlit app
 ├── 📄 requirements.txt           # Python dependencies
+├── 📄 .env
 ├── 📄 .env.example               # ตัวอย่างไฟล์ .env
-├── 📄 check_dataset.py           # ตรวจสอบ dataset
-├── 📄 SUBMISSION_GUIDE.md        # คู่มือการส่งงาน
 └── 📄 README.md                  # ไฟล์นี้
 ```
 
